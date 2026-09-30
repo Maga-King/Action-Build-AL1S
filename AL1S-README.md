@@ -6,7 +6,7 @@ This fork adds two independent inputs to **Build All OnePlus Kernels**, on the
 | Input | Default | Effect |
 |---|---|---|
 | `NOMOUNT` | on | Build upstream `maxsteeel/nomount` into the kernel, pinned to `6b1be186322d4e0bdc465cf27f6fc0d3679087c6`. Runtime activation still needs the matching NoMount userspace module. |
-| `ORIGINOS_DLKM` | off | Add the OriginOS compatibility ABI to OnePlus 13's **vendor `msm_drm.ko`**, including the information nodes previously implemented in the 13T boot kernel. Currently restricted to `oneplus_13_b`. Builds the matching external display module; supports Kleaf fast mode. |
+| `ORIGINOS_DLKM` | off | Add the OriginOS compatibility ABI to OnePlus 13's **vendor `msm_drm.ko`**, including the information nodes previously implemented in the 13T boot kernel. Currently restricted to `oneplus_13_b`. Builds the matching external display module after the upstream kernel build. |
 
 With `ORIGINOS_DLKM=off`, no compatibility source, init/exit hook or extra KMI entries are injected.
 NoMount and the existing kernel options remain independently selectable.
@@ -48,12 +48,19 @@ With `ORIGINOS_DLKM=off`, the upstream deny policy remains unchanged.
 
 ## Fast builds
 
-With OriginOS enabled, `FAST_BUILD` applies official Kleaf `--config=fast` to
-both the kernel and display DDK, sharing one Bazel cache and configuration.
-The kernel target is exactly `//msm-kernel:sun_perf_dist`; the upstream fuzzy
-query also selected `sun16k_perf_dist`, which this OnePlus 13 build does not need.
-Without OriginOS, the upstream direct-make fast build remains unchanged.
-This accelerates the cloud build; it is not a prebuilt-boot module-only build.
+`FAST_BUILD` runs the upstream **Build Kernel FAST** step unchanged, including
+its direct make/ccache implementation. Its `common/out` kernel, symbol tables
+and modules are packaged as a local Kleaf prebuilt base for the vendor module
+build. Only `sun_perf`'s `base_kernel` is redirected; the official vendor
+configuration and display DDK are retained. A Bazel action-graph check refuses
+to proceed if that module build would compile a second common/GKI kernel.
+
+The module build uses the ordinary sandboxed execution mode. Kleaf
+`--config=fast` is no longer used: its local mode broke native Oplus UFS relative
+header includes. Vendor module compilation adds time after the upstream fast
+kernel build. If upstream requests fallback, the full kernel path is used.
+With fast builds disabled, the exact 4K target `//msm-kernel:sun_perf_dist`
+avoids the upstream fuzzy query's unnecessary `sun16k_perf_dist` build.
 
 ## Requested build profile
 

@@ -15,9 +15,11 @@ if not data.startswith(b'\x7fELF') or b'al1s_originos_init' not in data:
     raise SystemExit('msm_drm.ko is not an ELF containing the AL1S adapter')
 a.output.mkdir(parents=True,exist_ok=True)
 chosen={'msm_drm.ko':module}
-dist=a.workspace/'kernel_platform/out/msm-kernel-sun-perf/dist'
+dist=(a.workspace/'kernel_platform/common/out' if (a.workspace/'al1s-fast-prebuilt.json').is_file()
+      else a.workspace/'kernel_platform/out/msm-kernel-sun-perf/dist')
 for name in ['Module.symvers','kernel.release','vmlinux.symvers','.config']:
     source=dist/name
+    if name=='kernel.release' and not source.is_file():source=dist/'include/config/kernel.release'
     if source.is_file():chosen['kernel-'+name.lstrip('.')]=source
 record={'artifact_type':'vendor_dlkm_module_update','complete_dsu_image':False,
         'requires_original_oneplus13_vendor_dlkm':True,'files':{}}
@@ -28,6 +30,9 @@ for name,path in chosen.items():
                          'bytes':path.stat().st_size,'sha256':sha}
 patch=a.workspace/'al1s-originos-patch.json'
 if patch.is_file():shutil.copy2(patch,a.output/patch.name)
+for name in ['al1s-fast-prebuilt.json','al1s-module-actions.json']:
+    source=a.workspace/name
+    if source.is_file():shutil.copy2(source,a.output/name)
 (a.output/'build-artifacts.json').write_text(json.dumps(record,indent=2))
 (a.output/'SHA256SUMS').write_text(''.join(f'{v["sha256"]}  {k}\n' for k,v in record['files'].items()))
 (a.output/'README.txt').write_text(
