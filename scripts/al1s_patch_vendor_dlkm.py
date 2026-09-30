@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Apply the optional AL1S ABI only to the vendor msm_drm module source."""
+"""Apply the optional vendor AL1S ABI and retain its existing kernel exports."""
 import argparse
 import hashlib
 import json
@@ -35,14 +35,25 @@ d = d.replace(init_marker, '#ifdef OPLUS_FEATURE_DISPLAY\nvoid al1s_originos_ini
 d = d.replace(init_tail, '\tbl_ic_ktz8868_init();\n\tal1s_originos_init();\n#endif /* OPLUS_FEATURE_DISPLAY */\n\treturn 0;')
 d = d.replace(exit_marker, exit_marker + '\n#ifdef OPLUS_FEATURE_DISPLAY\n\tal1s_originos_exit();\n#endif')
 b = b.replace(src_marker, src_marker + '\n             "oplus/SM8750/al1s_originos.c",')
+# Retain existing file APIs through GKI's symbol trimming. No VFS behavior changes.
+abi = a.workspace / 'kernel_platform/msm-kernel/android/abi_gki_aarch64_qcom'
+abi_text = abi.read_text()
+if '[abi_symbol_list]' not in abi_text:
+    raise SystemExit('Unrecognized QCOM KMI symbol list')
+required_exports = ['filp_open', 'kernel_read', 'filp_close']
+present = {line.strip() for line in abi_text.splitlines()}
+added_exports = [name for name in required_exports if name not in present]
+abi_text = abi_text.rstrip() + '\n' + ''.join('  ' + name + '\n' for name in added_exports)
 payload = a.payload.read_bytes()
 if any(s in payload for s in [b'sel_read_enforce', b'fake_enforcing', b'/sys/selinux']):
     raise SystemExit('Excluded SELinux behavior found in payload')
 (display / 'oplus/SM8750/al1s_originos.c').write_bytes(payload)
-driver.write_text(d)
-build.write_text(b)
-record = {'scope': 'vendor_dlkm/msm_drm.ko only', 'payload_sha256': hashlib.sha256(payload).hexdigest(),
-          'selinux_spoofing': False, 'kernel_node_patch': False,
-          'files': [str(x.relative_to(a.workspace)) for x in [driver, build, display/'oplus/SM8750/al1s_originos.c']]}
+abi.write_text(abi_text, encoding='utf-8', newline='\n')
+driver.write_text(d, encoding='utf-8', newline='\n')
+build.write_text(b, encoding='utf-8', newline='\n')
+record = {'scope': 'vendor_dlkm/msm_drm.ko implementation; existing kernel exports retained', 'payload_sha256': hashlib.sha256(payload).hexdigest(),
+          'selinux_spoofing': False, 'kernel_node_patch': False, 'retained_kernel_exports': required_exports,
+          'added_kmi_entries': added_exports,
+          'files': [str(x.relative_to(a.workspace)) for x in [abi, driver, build, display/'oplus/SM8750/al1s_originos.c']]}
 (a.workspace/'al1s-originos-patch.json').write_text(json.dumps(record, indent=2))
 print(json.dumps(record, indent=2))

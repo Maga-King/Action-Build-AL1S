@@ -387,3 +387,7 @@ fail:
 	pr_err("AL1S OriginOS: compatibility ABI setup failed: %d\n", ret);
 	al1s_originos_exit();
 }
+
+/* Common GKI and the vendor mixed tree use different VFS namespaces. */
+MODULE_IMPORT_NS(ANDROID_GKI_VFS_EXPORT_ONLY);
+MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);

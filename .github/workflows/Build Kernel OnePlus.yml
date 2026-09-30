@@ -237,7 +237,7 @@ jobs:
           fi
           echo "OriginOS DLKM=${ORIGINOS_DLKM}; no SELinux spoofing is included."
           if [[ "$ORIGINOS_DLKM" == "true" ]]; then
-            echo "Full vendor module build selected; FAST_BUILD is bypassed."
+            echo "Vendor module build selected; FAST_BUILD uses Kleaf fast mode for both kernel and DDK."
           fi
 
       - name: Extract Manifest Info
@@ -1405,7 +1405,12 @@ jobs:
           cd kernel_workspace
           if [ -f ./kernel_platform/build_with_bazel.py ]; then
             ./kernel_platform/oplus/bazel/oplus_modules_variant.sh ${{ env.CPUD }} ${{ env.BUILD_METHOD }}
-            ./kernel_platform/build_with_bazel.py -t ${{ env.CPUD }} ${{ env.BUILD_METHOD }}
+            if [[ "${{ inputs.ORIGINOS_DLKM }}" == "true" ]]; then
+              python3 "$GITHUB_WORKSPACE/kernel_workspace/Action-Build/scripts/al1s_build_kernel.py" \
+                "$GITHUB_WORKSPACE/kernel_workspace" "${{ env.CPUD }}" "${{ env.BUILD_METHOD }}" "${{ inputs.FAST_BUILD }}"
+            else
+              ./kernel_platform/build_with_bazel.py -t ${{ env.CPUD }} ${{ env.BUILD_METHOD }}
+            fi
           else
             LTO=thin SYSTEM_DLKM_RE_SIGN=0 BUILD_SYSTEM_DLKM=0 KMI_SYMBOL_LIST_STRICT_MODE=0 \
             ./kernel_platform/oplus/build/oplus_build_kernel.sh ${{ env.CPUD }} ${{ env.BUILD_METHOD }}
@@ -1415,7 +1420,7 @@ jobs:
         if: ${{ inputs.ORIGINOS_DLKM }}
         run: |
           bash "$GITHUB_WORKSPACE/kernel_workspace/Action-Build/scripts/al1s_build_display.sh" \
-            "$GITHUB_WORKSPACE/kernel_workspace" "${{ env.CPUD }}" "${{ env.BUILD_METHOD }}"
+            "$GITHUB_WORKSPACE/kernel_workspace" "${{ env.CPUD }}" "${{ env.BUILD_METHOD }}" "${{ inputs.FAST_BUILD }}"
 
       - name: Collect OriginOS vendor_dlkm outputs
         if: ${{ inputs.ORIGINOS_DLKM }}
