@@ -86,9 +86,11 @@ also fixes the upstream configuration branch which enabled `CONFIG_KPM` for
 The existing AnyKernel3 artifact packages the kernel. When OriginOS is enabled,
 an additional step builds the external display DDK target
 `//vendor/qcom/opensource/display-drivers:sun_perf_display_drivers_dist`
-against that kernel. The separate `AL1S-OriginOS-vendor_dlkm-*` artifact contains
-the patched `msm_drm.ko`, hashes and build provenance. A missing patched module
-fails the workflow.
+against that kernel. The separate `AL1S-OriginOS-msm_drm-*` artifact contains only the patched
+`msm_drm.ko`. The configured Clang toolchain strips debug information; every
+allocated ELF section is checked for unchanged contents. Size and SHA256 are
+printed in the build log. No partition image, symbol tables or sidecar files
+are uploaded in this artifact. A missing or invalid module fails the workflow.
 
 This artifact is a **module update, not a complete DSU image**. The generic OSS
 `vendor_dlkm.img` contains only the selected in-tree modules; it is deliberately
@@ -115,3 +117,12 @@ The FAST output directory `common/out` is excluded in `.bazelignore`. Kbuild
 creates `out/source` pointing back to `common`; scanning generated output as
 source caused Bazel's infinite-symlink error and could include generated headers.
 The ignore rule leaves the existing kernel artifacts and symlink intact.
+
+## Device probe after installation
+
+On the OnePlus 13, the AL1S kernel and replacement display module were observed
+loaded successfully. All 60 compatibility attributes were readable as root;
+UFS identity and both battery metrics matched their native sources. SELinux
+remained Enforcing and no fake enforcement node existed. Display transitions,
+fingerprint HBM, suspend/resume and access from individual Android service
+domains still require functional testing.

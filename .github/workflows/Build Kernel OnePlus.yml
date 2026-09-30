@@ -1473,19 +1473,19 @@ jobs:
           bash "$GITHUB_WORKSPACE/kernel_workspace/Action-Build/scripts/al1s_build_display.sh" \
             "$GITHUB_WORKSPACE/kernel_workspace" "${{ env.CPUD }}" "${{ env.BUILD_METHOD }}" "${{ inputs.FAST_BUILD && steps.fast_build.outputs.fallback != 'true' }}"
 
-      - name: Collect OriginOS vendor_dlkm outputs
+      - name: Prepare OriginOS msm_drm module
         if: ${{ inputs.ORIGINOS_DLKM }}
         run: |
           python3 "$GITHUB_WORKSPACE/kernel_workspace/Action-Build/scripts/al1s_collect_dlkm.py" \
             "$GITHUB_WORKSPACE/kernel_workspace" "$GITHUB_WORKSPACE/AL1S-vendor_dlkm"
 
-      - name: Upload OriginOS vendor_dlkm
-        if: ${{ inputs.ORIGINOS_DLKM && always() }}
+      - name: Upload OriginOS msm_drm module
+        if: ${{ inputs.ORIGINOS_DLKM }}
         uses: actions/upload-artifact@v4
         with:
-          name: AL1S-OriginOS-vendor_dlkm-${{ inputs.FILE }}-${{ github.run_number }}
-          path: AL1S-vendor_dlkm/
-          if-no-files-found: warn
+          name: AL1S-OriginOS-msm_drm-${{ inputs.FILE }}-${{ github.run_number }}
+          path: AL1S-vendor_dlkm/msm_drm.ko
+          if-no-files-found: error
 
       - name: Make AnyKernel3
         run: |
