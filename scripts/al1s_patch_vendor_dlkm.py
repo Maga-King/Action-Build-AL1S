@@ -44,16 +44,25 @@ required_exports = ['filp_open', 'kernel_read', 'filp_close']
 present = {line.strip() for line in abi_text.splitlines()}
 added_exports = [name for name in required_exports if name not in present]
 abi_text = abi_text.rstrip() + '\n' + ''.join('  ' + name + '\n' for name in added_exports)
+# This script runs only when ORIGINOS_DLKM is enabled. The requested custom
+# build allows every symbol through the GKI deny-list policy. Keep the actual
+# symbol-list processing, tracepoint validation and modpost checks intact.
+deny = a.workspace / 'kernel_platform/build/kernel/abi/symbols.deny'
+deny_original = deny.read_bytes()
+deny_text = '# AL1S OriginOS custom build: no ABI symbols are denied by policy.\n'
 payload = a.payload.read_bytes()
 if any(s in payload for s in [b'sel_read_enforce', b'fake_enforcing', b'/sys/selinux']):
     raise SystemExit('Excluded SELinux behavior found in payload')
 (display / 'oplus/SM8750/al1s_originos.c').write_bytes(payload)
 abi.write_text(abi_text, encoding='utf-8', newline='\n')
+deny.write_text(deny_text, encoding='utf-8', newline='\n')
 driver.write_text(d, encoding='utf-8', newline='\n')
 build.write_text(b, encoding='utf-8', newline='\n')
 record = {'scope': 'vendor_dlkm/msm_drm.ko implementation; existing kernel exports retained', 'payload_sha256': hashlib.sha256(payload).hexdigest(),
           'selinux_spoofing': False, 'kernel_node_patch': False, 'retained_kernel_exports': required_exports,
           'added_kmi_entries': added_exports,
-          'files': [str(x.relative_to(a.workspace)) for x in [abi, driver, build, display/'oplus/SM8750/al1s_originos.c']]}
+          'symbol_deny_policy': 'allow_all',
+          'original_symbols_deny_sha256': hashlib.sha256(deny_original).hexdigest(),
+          'files': [str(x.relative_to(a.workspace)) for x in [abi, deny, driver, build, display/'oplus/SM8750/al1s_originos.c']]}
 (a.workspace/'al1s-originos-patch.json').write_text(json.dumps(record, indent=2))
 print(json.dumps(record, indent=2))

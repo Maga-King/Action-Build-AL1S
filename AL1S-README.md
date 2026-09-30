@@ -40,6 +40,12 @@ The optional build retains the existing `filp_open`, `kernel_read` and
 This prevents GKI symbol trimming from breaking the external adapter; the node
 implementation stays in `msm_drm.ko` and no VFS function behavior is changed.
 
+For this custom OriginOS build, the GKI `build/kernel/abi/symbols.deny` policy
+list is emptied: all symbols are allowed by that policy, as requested. Actual
+export availability, symbol versions, namespace imports and module linking
+are still checked. The original deny-list hash is recorded in patch provenance.
+With `ORIGINOS_DLKM=off`, the upstream deny policy remains unchanged.
+
 ## Fast builds
 
 With OriginOS enabled, `FAST_BUILD` applies official Kleaf `--config=fast` to
