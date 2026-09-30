@@ -137,6 +137,11 @@ on:
         description: "是否启用极速构建？//Enable ultra-fast build?"
         required: true
         default: true
+      FAST_BASE_RUN:
+        type: string
+        description: "???OriginOS????????FAST?????ID???????//Reuse saved FAST base run ID"
+        required: false
+        default: ""
       LSM_BBG:
         type: boolean
         description: "是否启用关键分区写入保护模块(BBG)？//Enable critical partition write protection module (BBG)?"
@@ -192,6 +197,9 @@ jobs:
   build:
     name: ${{ github.event.inputs.FAST_BUILD == 'true' && ' [FAST]' || '' }}${{ contains(github.event.inputs.FILE, '_aosp') && ' [AOSP]' || '' }}${{ github.event.inputs.KPM == 'KPM' && ' [KPM]' || github.event.inputs.KPM == 'KPN' && ' [KPN]' || '' }}${{ github.event.inputs.LSM_BBG == 'true' && ' [BBG]' || '' }}${{ github.event.inputs.SCHED_HMBIRD == 'true' && ' [HMBIRD]' || '' }}${{ github.event.inputs.DROID_SPACES == 'true' && ' [DS]' || '' }}${{ startsWith(github.event.inputs.ZRAM, '1/') && ' [ZRAM]' || '' }}${{ github.event.inputs.RE_KERNEL == 'true' && ' [REKER]' || '' }}${{ github.event.inputs.LZ4_UPDATE == 'true' && ' [LZ4UPD]' || '' }}${{ inputs.NOMOUNT && ' [NoMount]' || '' }}${{ inputs.ORIGINOS_DLKM && ' [OriginOS-DLKM]' || '' }}For ${{ github.event.inputs.FILE }} ${{ github.event.inputs.SUFFIX }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
     env:
       CCACHE_COMPILERCHECK: "none"
       CCACHE_NOHASHDIR: "true"
@@ -230,10 +238,19 @@ jobs:
         env:
           ORIGINOS_DLKM: ${{ inputs.ORIGINOS_DLKM }}
           FILE: ${{ inputs.FILE }}
+          FAST_BASE_RUN: ${{ inputs.FAST_BASE_RUN }}
+          FAST_BUILD: ${{ inputs.FAST_BUILD }}
         run: |
           if [[ "$ORIGINOS_DLKM" == "true" && "$FILE" != "oneplus_13_b" ]]; then
             echo "::error::OriginOS DLKM currently targets oneplus_13_b only."
             exit 1
+          fi
+          if [[ -n "$FAST_BASE_RUN" ]]; then
+            if [[ ! "$FAST_BASE_RUN" =~ ^[0-9]+$ || "$FAST_BUILD" != "true" || "$ORIGINOS_DLKM" != "true" ]]; then
+              echo "::error::FAST_BASE_RUN requires a numeric run ID, FAST_BUILD and ORIGINOS_DLKM."
+              exit 1
+            fi
+            echo "Reusing saved FAST base from run $FAST_BASE_RUN; kernel options must match that build."
           fi
           echo "OriginOS DLKM=${ORIGINOS_DLKM}; no SELinux spoofing is included."
           if [[ "$ORIGINOS_DLKM" == "true" ]]; then
@@ -1201,8 +1218,18 @@ jobs:
         run: |
           python3 "$GITHUB_WORKSPACE/kernel_workspace/Action-Build/scripts/al1s_preflight.py" "$GITHUB_WORKSPACE/kernel_workspace"
 
+      - name: Restore saved FAST kernel
+        if: ${{ inputs.FAST_BASE_RUN != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          pattern: AL1S-FAST-base-${{ inputs.FILE }}-*
+          merge-multiple: true
+          run-id: ${{ inputs.FAST_BASE_RUN }}
+          github-token: ${{ github.token }}
+          path: kernel_workspace/kernel_platform/common/out
+
       - name: Build Kernel FAST
-        if: ${{ github.event.inputs.FAST_BUILD == 'true' }}
+        if: ${{ github.event.inputs.FAST_BUILD == 'true' && inputs.FAST_BASE_RUN == '' }}
         id: fast_build
         run: |
           cd kernel_workspace/kernel_platform
@@ -1405,7 +1432,7 @@ jobs:
           ccache -s
 
       - name: Preserve completed FAST kernel
-        if: ${{ inputs.ORIGINOS_DLKM && inputs.FAST_BUILD && steps.fast_build.outputs.fallback != 'true' }}
+        if: ${{ inputs.ORIGINOS_DLKM && inputs.FAST_BUILD && inputs.FAST_BASE_RUN == '' && steps.fast_build.outputs.fallback != 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: AL1S-FAST-base-${{ inputs.FILE }}-${{ github.run_number }}

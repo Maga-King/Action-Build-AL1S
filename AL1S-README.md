@@ -102,3 +102,16 @@ Successful compilation does not establish DSU boot or display correctness.
 Use a matching kernel/module build and validate module loading, node labels,
 AOD transitions, fingerprint HBM and suspend/resume on the actual device.
 Do not substitute the 13T's complete vendor module image for OnePlus 13.
+
+## Resume vendor module compilation
+
+Set `FAST_BASE_RUN` to a previous run ID containing `AL1S-FAST-base-*` artifacts,
+with `FAST_BUILD` and `ORIGINOS_DLKM` enabled. The completed kernel is restored
+and the upstream FAST kernel step is skipped; only the vendor module dependency
+build and display DDK continue. Use the same device and kernel options as that
+saved base. Leave the field empty for the normal upstream build path.
+
+The FAST output directory `common/out` is excluded in `.bazelignore`. Kbuild
+creates `out/source` pointing back to `common`; scanning generated output as
+source caused Bazel's infinite-symlink error and could include generated headers.
+The ignore rule leaves the existing kernel artifacts and symlink intact.

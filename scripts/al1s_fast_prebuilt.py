@@ -18,6 +18,12 @@ p.add_argument('workspace', type=Path)
 p.add_argument('--analysis-only', action='store_true', help='Generate inert inputs for aquery only; never compile with these')
 a = p.parse_args()
 platform = a.workspace.resolve() / 'kernel_platform'
+# FAST uses make O=out, which creates common/out/source -> common. Keep the
+# entire output tree out of Bazel globs, including headers and nested symlinks.
+ignore = platform / '.bazelignore'
+ignore_text = ignore.read_text() if ignore.exists() else ''
+if 'common/out' not in {line.strip() for line in ignore_text.splitlines()}:
+    ignore.write_text(ignore_text.rstrip() + '\ncommon/out\n')
 out = platform / 'common/out'
 package = platform / 'build/kernel/kleaf/al1s_fast_prebuilt'
 macro = platform / 'msm-kernel/msm_kernel_la.bzl'
