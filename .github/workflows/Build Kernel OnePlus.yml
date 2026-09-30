@@ -6,7 +6,7 @@ on:
         type: choice
         description: "配置文件//Configuration file"
         required: true
-        default: oneplus_15
+        default: oneplus_13_b
         options:
           - oneplus_nord_n30_se_5g_v
           - oneplus_10r_v
@@ -69,7 +69,7 @@ on:
         type: choice
         description: "SUSFS模块下载调用方向//SUSFS module branch"
         required: true
-        default: CI
+        default: N/A
         options:
           - CI
           - Release
@@ -78,7 +78,7 @@ on:
         type: choice
         description: "内核模块实现方式//Kernel module implementation method"
         required: true
-        default: KPN
+        default: N/A
         options:
           - KPM
           - KPN
@@ -87,7 +87,7 @@ on:
         type: string
         description: "回退SUSFS(输入哈希或次数或-1关闭)//Rollback SUSFS (Enter commit hash, count, or -1 to disable)"
         required: false
-        default: ""
+        default: "-1"
       DYNAMIC_REPO:
         type: string
         description: "动态清单仓库所有者//Manifest repository owner"
@@ -103,6 +103,16 @@ on:
         description: "管理器分支名(必填)/内置分支名(必填)/回退分支提交哈希版本(留空不修改)//Manager Branch name (Required) / Builtin branch name (Required) / Rollback branch commit hash version (Leave blank to not modify)"
         required: false
         default: "dev/dev-susfs/"
+      NOMOUNT:
+        type: boolean
+        description: "启用 NoMount 内核支持（独立于 OriginOS）//Enable NoMount kernel support"
+        required: true
+        default: true
+      ORIGINOS_DLKM:
+        type: boolean
+        description: "一加13 OriginOS兼容节点及显示适配，仅编入vendor_dlkm；关闭为普通内核//OP13 OriginOS vendor_dlkm adapter"
+        required: true
+        default: false
       LZ4_UPDATE:
         type: boolean
         description: "是否升级LZ4到上游最新？//Upgrade LZ4 to the latest upstream?"
@@ -117,7 +127,7 @@ on:
         type: string
         description: "自定义内核后缀(不输入使用RAND_STR或-1关闭)//Custom kernel suffix (Leave blank to use RAND_STR, or -1 to disable)"
         required: false
-        default: ""
+        default: "AL1S"
       RESUBLEVEL:
         description: "自定义内核等级欺骗(SUBLEVEL)//Custom kernel SUBLEVEL spoofing"
         required: false
@@ -151,12 +161,12 @@ on:
         type: boolean
         description: "是否添加风驰驱动1.0？//Add Fengchi (HMBIRD) Driver 1.0?"
         required: true
-        default: false
+        default: true
       DROID_SPACES:
         type: boolean
         description: "是否添加轻量级Linux容器支持(DroidSpaces)？//Add lightweight Linux container support (DroidSpaces)?"
         required: true
-        default: false
+        default: true
       RE_KERNEL:
         type: boolean
         description: "是否添加Re-Kernel？//Add Re-Kernel?"
@@ -180,7 +190,7 @@ on:
 
 jobs:
   build:
-    name: ${{ github.event.inputs.FAST_BUILD == 'true' && ' [FAST]' || '' }}${{ contains(github.event.inputs.FILE, '_aosp') && ' [AOSP]' || '' }}${{ github.event.inputs.KPM == 'KPM' && ' [KPM]' || github.event.inputs.KPM == 'KPN' && ' [KPN]' || '' }}${{ github.event.inputs.LSM_BBG == 'true' && ' [BBG]' || '' }}${{ github.event.inputs.SCHED_HMBIRD == 'true' && ' [HMBIRD]' || '' }}${{ github.event.inputs.DROID_SPACES == 'true' && ' [DS]' || '' }}${{ startsWith(github.event.inputs.ZRAM, '1/') && ' [ZRAM]' || '' }}${{ github.event.inputs.RE_KERNEL == 'true' && ' [REKER]' || '' }}${{ github.event.inputs.LZ4_UPDATE == 'true' && ' [LZ4UPD]' || '' }}For ${{ github.event.inputs.FILE }} ${{ github.event.inputs.SUFFIX }}
+    name: ${{ github.event.inputs.FAST_BUILD == 'true' && ' [FAST]' || '' }}${{ contains(github.event.inputs.FILE, '_aosp') && ' [AOSP]' || '' }}${{ github.event.inputs.KPM == 'KPM' && ' [KPM]' || github.event.inputs.KPM == 'KPN' && ' [KPN]' || '' }}${{ github.event.inputs.LSM_BBG == 'true' && ' [BBG]' || '' }}${{ github.event.inputs.SCHED_HMBIRD == 'true' && ' [HMBIRD]' || '' }}${{ github.event.inputs.DROID_SPACES == 'true' && ' [DS]' || '' }}${{ startsWith(github.event.inputs.ZRAM, '1/') && ' [ZRAM]' || '' }}${{ github.event.inputs.RE_KERNEL == 'true' && ' [REKER]' || '' }}${{ github.event.inputs.LZ4_UPDATE == 'true' && ' [LZ4UPD]' || '' }}${{ inputs.NOMOUNT && ' [NoMount]' || '' }}${{ inputs.ORIGINOS_DLKM && ' [OriginOS-DLKM]' || '' }}For ${{ github.event.inputs.FILE }} ${{ github.event.inputs.SUFFIX }}
     runs-on: ubuntu-latest
     env:
       CCACHE_COMPILERCHECK: "none"
@@ -208,7 +218,23 @@ jobs:
           git config --global user.name "Numbersf"
           git config --global user.email "263623064@qq.com"
           mkdir kernel_workspace && cd kernel_workspace
-          git clone https://github.com/Numbersf/Action-Build.git -b KernelSU-Next
+          git clone --no-checkout "https://github.com/${GITHUB_REPOSITORY}.git" Action-Build
+          git -C Action-Build fetch --depth=1 origin "$GITHUB_SHA"
+          git -C Action-Build checkout --detach "$GITHUB_SHA"
+
+      - name: Validate AL1S options
+        env:
+          ORIGINOS_DLKM: ${{ inputs.ORIGINOS_DLKM }}
+          FILE: ${{ inputs.FILE }}
+        run: |
+          if [[ "$ORIGINOS_DLKM" == "true" && "$FILE" != "oneplus_13_b" ]]; then
+            echo "::error::OriginOS DLKM currently targets oneplus_13_b only."
+            exit 1
+          fi
+          echo "OriginOS DLKM=${ORIGINOS_DLKM}; no SELinux spoofing is included."
+          if [[ "$ORIGINOS_DLKM" == "true" ]]; then
+            echo "Full vendor module build selected; FAST_BUILD is bypassed."
+          fi
 
       - name: Extract Manifest Info
         id: extract_info
@@ -992,10 +1018,10 @@ jobs:
           set_config "CONFIG_KSU=y"
 
           # KPM配置
-          if [ "${{ github.event.inputs.KPM }}" = "KPM" ] || [ "${{ github.event.inputs.KPM }}" = "N/A" ]; then
+          if [ "${{ github.event.inputs.KPM }}" = "KPM" ]; then
             set_config "CONFIG_KPM=y"
           fi
-          if [ "${{ github.event.inputs.KPM }}" = "KPN" ]; then
+          if [ "${{ github.event.inputs.KPM }}" != "KPM" ]; then
             set_config "CONFIG_KPM=n"
           fi
 
@@ -1123,6 +1149,17 @@ jobs:
           fi
 
       # Custom kernel build time, without adding #1 SMP PREEMPT 自定义内核构建时间，不要加入#1 SMP PREEMPT
+      - name: Add NoMount support
+        if: ${{ inputs.NOMOUNT }}
+        run: bash scripts/al1s_nomount.sh "$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/common"
+
+      - name: Add OriginOS compatibility to vendor msm_drm
+        if: ${{ inputs.ORIGINOS_DLKM }}
+        run: |
+          python3 scripts/al1s_patch_vendor_dlkm.py \
+            "$GITHUB_WORKSPACE/kernel_workspace" \
+            "$GITHUB_WORKSPACE/patches/originos/al1s_originos.c"
+
       - name: Custom BUILD_TIME
         if: ${{ github.event.inputs.BUILD_TIME != '-1' }}
         shell: bash
@@ -1156,7 +1193,7 @@ jobs:
           sed -i '/obj-y.*gpueb/d' kernel_workspace/kernel-5.10/drivers/gpu/mediatek/Makefile
 
       - name: Build Kernel FAST
-        if: ${{ github.event.inputs.FAST_BUILD == 'true' }}
+        if: ${{ github.event.inputs.FAST_BUILD == 'true' && !inputs.ORIGINOS_DLKM }}
         id: fast_build
         run: |
           cd kernel_workspace/kernel_platform
@@ -1359,7 +1396,7 @@ jobs:
           ccache -s
 
       - name: Fallback to Build Kernel
-        if: ${{ github.event.inputs.FAST_BUILD == 'false' || steps.fast_build.outputs.fallback == 'true' }}
+        if: ${{ inputs.ORIGINOS_DLKM || github.event.inputs.FAST_BUILD == 'false' || steps.fast_build.outputs.fallback == 'true' }}
         run: |
           cd kernel_workspace
           if [ -f ./kernel_platform/build_with_bazel.py ]; then
@@ -1369,6 +1406,20 @@ jobs:
             LTO=thin SYSTEM_DLKM_RE_SIGN=0 BUILD_SYSTEM_DLKM=0 KMI_SYMBOL_LIST_STRICT_MODE=0 \
             ./kernel_platform/oplus/build/oplus_build_kernel.sh ${{ env.CPUD }} ${{ env.BUILD_METHOD }}
           fi
+
+      - name: Collect OriginOS vendor_dlkm outputs
+        if: ${{ inputs.ORIGINOS_DLKM }}
+        run: |
+          python3 scripts/al1s_collect_dlkm.py \
+            "$GITHUB_WORKSPACE/kernel_workspace" "$GITHUB_WORKSPACE/AL1S-vendor_dlkm"
+
+      - name: Upload OriginOS vendor_dlkm
+        if: ${{ inputs.ORIGINOS_DLKM && always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: AL1S-OriginOS-vendor_dlkm-${{ inputs.FILE }}-${{ github.run_number }}
+          path: AL1S-vendor_dlkm/
+          if-no-files-found: warn
 
       - name: Make AnyKernel3
         run: |
