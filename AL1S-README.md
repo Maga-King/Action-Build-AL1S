@@ -62,6 +62,17 @@ kernel build. If upstream requests fallback, the full kernel path is used.
 With fast builds disabled, the exact 4K target `//msm-kernel:sun_perf_dist`
 avoids the upstream fuzzy query's unnecessary `sun16k_perf_dist` build.
 
+Before FAST compilation, a real Bazel `aquery` validates the complete vendor
+dependency graph using temporary analysis-only inputs. It checks toolchain
+platforms and rejects a second GKI build. The temporary package is removed and
+the vendor macro restored on both success and failure; these inputs are never
+compiled or packaged. The prebuilt platforms follow Kleaf's official template,
+including target/host architecture and the configured Clang version.
+
+The completed FAST kernel is uploaded as `AL1S-FAST-base-*` before the display
+step, preserving its Image, symbol tables, configuration and modules even if
+the later module build fails. This is a build checkpoint, not a flashable ZIP.
+
 ## Requested build profile
 
 `oneplus_13_b`, KernelSU Next, suffix `AL1S`, NoMount on, HMBIRD on, DroidSpaces

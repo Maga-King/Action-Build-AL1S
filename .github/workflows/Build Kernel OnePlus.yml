@@ -1196,6 +1196,11 @@ jobs:
           echo "Disabling GPUEB for MTK kernel 5.10"
           sed -i '/obj-y.*gpueb/d' kernel_workspace/kernel-5.10/drivers/gpu/mediatek/Makefile
 
+      - name: Preflight OriginOS module graph
+        if: ${{ inputs.ORIGINOS_DLKM && inputs.FAST_BUILD }}
+        run: |
+          python3 "$GITHUB_WORKSPACE/kernel_workspace/Action-Build/scripts/al1s_preflight.py" "$GITHUB_WORKSPACE/kernel_workspace"
+
       - name: Build Kernel FAST
         if: ${{ github.event.inputs.FAST_BUILD == 'true' }}
         id: fast_build
@@ -1398,6 +1403,25 @@ jobs:
           make O=out "${MAKE_ARGS[@]}" olddefconfig --no-print-directory
           make -j"$(nproc --all)" O=out "${MAKE_ARGS[@]}"
           ccache -s
+
+      - name: Preserve completed FAST kernel
+        if: ${{ inputs.ORIGINOS_DLKM && inputs.FAST_BUILD && steps.fast_build.outputs.fallback != 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: AL1S-FAST-base-${{ inputs.FILE }}-${{ github.run_number }}
+          compression-level: 1
+          include-hidden-files: true
+          if-no-files-found: error
+          path: |
+            kernel_workspace/kernel_platform/common/out/vmlinux
+            kernel_workspace/kernel_platform/common/out/System.map
+            kernel_workspace/kernel_platform/common/out/Module.symvers
+            kernel_workspace/kernel_platform/common/out/vmlinux.symvers
+            kernel_workspace/kernel_platform/common/out/modules.*
+            kernel_workspace/kernel_platform/common/out/.config
+            kernel_workspace/kernel_platform/common/out/include/config/kernel.release
+            kernel_workspace/kernel_platform/common/out/arch/arm64/boot/Image
+            kernel_workspace/kernel_platform/common/out/**/*.ko
 
       - name: Fallback to Build Kernel
         if: ${{ github.event.inputs.FAST_BUILD == 'false' || steps.fast_build.outputs.fallback == 'true' }}

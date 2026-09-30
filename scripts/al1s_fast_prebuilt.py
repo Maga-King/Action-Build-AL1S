@@ -7,12 +7,15 @@ the display DDK still uses the official vendor configuration and headers.
 import argparse
 import hashlib
 import json
+import re
 import shutil
 import tarfile
+import tempfile
 from pathlib import Path, PurePosixPath
 
 p = argparse.ArgumentParser()
 p.add_argument('workspace', type=Path)
+p.add_argument('--analysis-only', action='store_true', help='Generate inert inputs for aquery only; never compile with these')
 a = p.parse_args()
 platform = a.workspace.resolve() / 'kernel_platform'
 out = platform / 'common/out'
@@ -22,6 +25,22 @@ label = '//build/kernel/kleaf/al1s_fast_prebuilt:kernel'
 required = ['vmlinux', 'System.map', 'Module.symvers', 'vmlinux.symvers',
             'modules.builtin', 'modules.builtin.modinfo', 'modules.order', '.config',
             'include/config/kernel.release', 'arch/arm64/boot/Image']
+if a.analysis_only:
+    scratch = tempfile.TemporaryDirectory(prefix='al1s-analysis-inputs-')
+    out = Path(scratch.name)
+    for name in required:
+        f = out / name
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text('')
+    (out / 'Module.symvers').write_text(''.join(
+        '0x00000000\t' + name + '\tvmlinux\tEXPORT_SYMBOL\n'
+        for name in ['filp_open', 'kernel_read', 'filp_close']))
+    (out / 'include/config/kernel.release').write_text('6.6.118-AL1S-analysis-only\n')
+constants = (platform / 'common/build.config.constants').read_text()
+version = re.search(r'^CLANG_VERSION=[\"\']?(r[0-9a-z]+)', constants, re.M)
+if not version:
+    raise SystemExit('Cannot determine the FAST compiler constraint from build.config.constants')
+clang_constraint = '//prebuilts/clang/host/linux-x86/kleaf:' + version.group(1)
 for name in required:
     if not (out / name).is_file():
         raise SystemExit('Build Kernel FAST artifact missing: ' + str(out / name))
@@ -48,7 +67,8 @@ if package.exists():
     raise SystemExit('Prebuilt package already exists; use a fresh build workspace')
 package.mkdir()
 record = {'base_kernel_source': 'upstream Build Kernel FAST common/out',
-          'vendor_base_kernel': label, 'files': {}}
+          'vendor_base_kernel': label, 'analysis_only': a.analysis_only,
+          'clang_constraint': clang_constraint, 'files': {}}
 for name in required:
     source = out / name
     destination = package / source.name
@@ -74,15 +94,25 @@ with tarfile.open(package / 'modules_staging_dir.tar.gz', 'w:gz') as archive:
 sources = [Path(name).name for name in required]
 build = '''load("//build/kernel/kleaf/impl:kernel_filegroup.bzl", "kernel_filegroup")
 
+platform(
+    name = "kernel_platform_target",
+    constraint_values = ["@platforms//os:android", "@platforms//cpu:arm64", %s],
+)
+platform(
+    name = "kernel_platform_exec",
+    constraint_values = ["@platforms//os:linux", "@platforms//cpu:x86_64", %s],
+)
 kernel_filegroup(
     name = "kernel",
     srcs = %s,
     deps = ["unstripped_modules.tar.gz", "modules_staging_dir.tar.gz"],
     kernel_release = "kernel.release",
     all_module_names = %s,
+    target_platform = ":kernel_platform_target",
+    exec_platform = ":kernel_platform_exec",
     visibility = ["//visibility:public"],
 )
-''' % (json.dumps(sources), json.dumps(module_paths))
+''' % (json.dumps(clang_constraint), json.dumps(clang_constraint), json.dumps(sources), json.dumps(module_paths))
 (package / 'BUILD.bazel').write_text(build)
 # Keep the original common symbol-list target; it only supplies text files.
 text = text.replace(anchor,
@@ -97,4 +127,5 @@ for name, target in [('msm_kernel_extensions.bzl', '../msm-kernel/msm_kernel_ext
             link.unlink()
         link.symlink_to(target)
 (a.workspace / 'al1s-fast-prebuilt.json').write_text(json.dumps(record, indent=2))
-print('AL1S: vendor modules use the completed Build Kernel FAST kernel; no second GKI build.')
+print('AL1S: analysis-only placeholders' if a.analysis_only else
+      'AL1S: vendor modules use the completed Build Kernel FAST kernel; no second GKI build.')
