@@ -221,6 +221,10 @@ jobs:
           git clone --no-checkout "https://github.com/${GITHUB_REPOSITORY}.git" Action-Build
           git -C Action-Build fetch --depth=1 origin "$GITHUB_SHA"
           git -C Action-Build checkout --detach "$GITHUB_SHA"
+          test -f Action-Build/scripts/al1s_nomount.sh
+          test -f Action-Build/scripts/al1s_patch_vendor_dlkm.py
+          test -f Action-Build/scripts/al1s_collect_dlkm.py
+          test -f Action-Build/patches/originos/al1s_originos.c
 
       - name: Validate AL1S options
         env:
@@ -1151,14 +1155,14 @@ jobs:
       # Custom kernel build time, without adding #1 SMP PREEMPT 自定义内核构建时间，不要加入#1 SMP PREEMPT
       - name: Add NoMount support
         if: ${{ inputs.NOMOUNT }}
-        run: bash scripts/al1s_nomount.sh "$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/common"
+        run: bash "$GITHUB_WORKSPACE/kernel_workspace/Action-Build/scripts/al1s_nomount.sh" "$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/common"
 
       - name: Add OriginOS compatibility to vendor msm_drm
         if: ${{ inputs.ORIGINOS_DLKM }}
         run: |
-          python3 scripts/al1s_patch_vendor_dlkm.py \
+          python3 "$GITHUB_WORKSPACE/kernel_workspace/Action-Build/scripts/al1s_patch_vendor_dlkm.py" \
             "$GITHUB_WORKSPACE/kernel_workspace" \
-            "$GITHUB_WORKSPACE/patches/originos/al1s_originos.c"
+            "$GITHUB_WORKSPACE/kernel_workspace/Action-Build/patches/originos/al1s_originos.c"
 
       - name: Custom BUILD_TIME
         if: ${{ github.event.inputs.BUILD_TIME != '-1' }}
@@ -1410,7 +1414,7 @@ jobs:
       - name: Collect OriginOS vendor_dlkm outputs
         if: ${{ inputs.ORIGINOS_DLKM }}
         run: |
-          python3 scripts/al1s_collect_dlkm.py \
+          python3 "$GITHUB_WORKSPACE/kernel_workspace/Action-Build/scripts/al1s_collect_dlkm.py" \
             "$GITHUB_WORKSPACE/kernel_workspace" "$GITHUB_WORKSPACE/AL1S-vendor_dlkm"
 
       - name: Upload OriginOS vendor_dlkm
