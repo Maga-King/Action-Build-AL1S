@@ -46,9 +46,19 @@ also fixes the upstream configuration branch which enabled `CONFIG_KPM` for
 ## Outputs and verification
 
 The existing AnyKernel3 artifact packages the kernel. When OriginOS is enabled,
-the separate `AL1S-OriginOS-vendor_dlkm-*` artifact must include a real
-`vendor_dlkm.img`, the patched `msm_drm.ko`, hashes and build provenance. A
-boot-only result is treated as a failed/incomplete OriginOS build.
+an additional step builds the external display DDK target
+`//vendor/qcom/opensource/display-drivers:sun_perf_display_drivers_dist`
+against that kernel. The separate `AL1S-OriginOS-vendor_dlkm-*` artifact contains
+the patched `msm_drm.ko`, hashes and build provenance. A missing patched module
+fails the workflow.
+
+This artifact is a **module update, not a complete DSU image**. The generic OSS
+`vendor_dlkm.img` contains only the selected in-tree modules; it is deliberately
+excluded because replacing the phone's partition with it would lose other
+device modules. A complete image must be prepared from the original OnePlus 13
+`vendor_dlkm`, preserving its other modules, metadata and load lists, after
+checking the new display module's symbol versions and dependencies. The user's
+original image is kept locally and is not uploaded to this public repository.
 
 Successful compilation does not establish DSU boot or display correctness.
 Use a matching kernel/module build and validate module loading, node labels,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Collect real full-build outputs; never label a boot-only build as DLKM."""
+"""Collect the explicit display DDK output; do not mislabel an OSS image."""
 import argparse, hashlib, json, shutil
 from pathlib import Path
 
@@ -7,34 +7,34 @@ p=argparse.ArgumentParser()
 p.add_argument('workspace',type=Path)
 p.add_argument('output',type=Path)
 a=p.parse_args()
+module=a.workspace/'kernel_platform/out/al1s-display/msm_drm.ko'
+if not module.is_file():
+    raise SystemExit('External display DDK output missing: '+str(module))
+data=module.read_bytes()
+if not data.startswith(b'\x7fELF') or b'al1s_originos_init' not in data:
+    raise SystemExit('msm_drm.ko is not an ELF containing the AL1S adapter')
 a.output.mkdir(parents=True,exist_ok=True)
-roots=[a.workspace/'kernel_platform/out', a.workspace/'out']
-def candidates(name):
-    paths=[]
-    for root in roots:
-        if root.exists():
-            paths.extend(x for x in root.rglob(name) if x.is_file())
-    return sorted(paths,key=lambda x: ('/dist/' not in x.as_posix(),len(x.parts),str(x)))
-def digest(path):
-    with path.open('rb') as f: return hashlib.file_digest(f,'sha256').hexdigest()
-modules=candidates('msm_drm.ko')
-modules=[x for x in modules if b'al1s_originos_init' in x.read_bytes()]
-if not modules:
-    raise SystemExit('No built msm_drm.ko containing AL1S found. DLKM build is incomplete.')
-images=candidates('vendor_dlkm.img')
-if not images:
-    shutil.copy2(modules[0],a.output/'msm_drm.ko')
-    raise SystemExit('Patched module exists, but no vendor_dlkm.img was built. Not a complete DSU image.')
-chosen={'msm_drm.ko':modules[0],'vendor_dlkm.img':images[0]}
-record={}
+chosen={'msm_drm.ko':module}
+dist=a.workspace/'kernel_platform/out/msm-kernel-sun-perf/dist'
+for name in ['Module.symvers','kernel.release','vmlinux.symvers','.config']:
+    source=dist/name
+    if source.is_file():chosen['kernel-'+name.lstrip('.')]=source
+record={'artifact_type':'vendor_dlkm_module_update','complete_dsu_image':False,
+        'requires_original_oneplus13_vendor_dlkm':True,'files':{}}
 for name,path in chosen.items():
     shutil.copy2(path,a.output/name)
-    record[name]={'source':str(path.relative_to(a.workspace)), 'bytes':path.stat().st_size,'sha256':digest(path)}
-for name in ['modules.load','modules.dep','modules.alias','Module.symvers']:
-    found=candidates(name)
-    if found: shutil.copy2(found[0],a.output/name)
+    with path.open('rb') as f:sha=hashlib.file_digest(f,'sha256').hexdigest()
+    record['files'][name]={'source':str(path.relative_to(a.workspace)),
+                         'bytes':path.stat().st_size,'sha256':sha}
 patch=a.workspace/'al1s-originos-patch.json'
-if patch.exists(): shutil.copy2(patch,a.output/patch.name)
+if patch.is_file():shutil.copy2(patch,a.output/patch.name)
 (a.output/'build-artifacts.json').write_text(json.dumps(record,indent=2))
-(a.output/'SHA256SUMS').write_text(''.join(f'{v["sha256"]}  {k}\n' for k,v in record.items()))
+(a.output/'SHA256SUMS').write_text(''.join(f'{v["sha256"]}  {k}\n' for k,v in record['files'].items()))
+(a.output/'README.txt').write_text(
+    'This is a vendor_dlkm module update, NOT a complete DSU partition image.\n'
+    'Preserve the original OnePlus 13 vendor_dlkm image and its other modules.\n'
+    'Verify symbol versions/dependencies before replacing lib/modules/msm_drm.ko.\n'
+    'The generic OSS vendor_dlkm.img omits external/proprietary device modules\n'
+    'and is intentionally excluded from this artifact.\n'
+    'Compilation is not proof of runtime compatibility.\n')
 print(json.dumps(record,indent=2))

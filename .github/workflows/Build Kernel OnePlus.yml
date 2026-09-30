@@ -1411,6 +1411,12 @@ jobs:
             ./kernel_platform/oplus/build/oplus_build_kernel.sh ${{ env.CPUD }} ${{ env.BUILD_METHOD }}
           fi
 
+      - name: Build OriginOS external display DDK module
+        if: ${{ inputs.ORIGINOS_DLKM }}
+        run: |
+          bash "$GITHUB_WORKSPACE/kernel_workspace/Action-Build/scripts/al1s_build_display.sh" \
+            "$GITHUB_WORKSPACE/kernel_workspace" "${{ env.CPUD }}" "${{ env.BUILD_METHOD }}"
+
       - name: Collect OriginOS vendor_dlkm outputs
         if: ${{ inputs.ORIGINOS_DLKM }}
         run: |
