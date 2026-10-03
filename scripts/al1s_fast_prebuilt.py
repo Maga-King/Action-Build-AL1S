@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Feed upstream Build Kernel FAST artifacts into the vendor mixed module build.
 
-No kernel compilation happens here. Only sun_perf's base_kernel is replaced;
+No kernel compilation happens here. Only the selected target's base is replaced;
 the display DDK still uses the official vendor configuration and headers.
 """
 import argparse
@@ -15,8 +15,14 @@ from pathlib import Path, PurePosixPath
 
 p = argparse.ArgumentParser()
 p.add_argument('workspace', type=Path)
+p.add_argument('--platform', required=True)
+p.add_argument('--variant', required=True)
 p.add_argument('--analysis-only', action='store_true', help='Generate inert inputs for aquery only; never compile with these')
 a = p.parse_args()
+for value in (a.platform, a.variant):
+    if not re.fullmatch(r'[a-zA-Z0-9_]+', value):
+        raise SystemExit('Invalid platform/variant: ' + value)
+selected_target = a.platform + '_' + a.variant
 platform = a.workspace.resolve() / 'kernel_platform'
 # FAST uses make O=out, which creates common/out/source -> common. Keep the
 # entire output tree out of Bazel globs, including headers and nested symlinks.
@@ -73,7 +79,7 @@ if package.exists():
     raise SystemExit('Prebuilt package already exists; use a fresh build workspace')
 package.mkdir()
 record = {'base_kernel_source': 'upstream Build Kernel FAST common/out',
-          'vendor_base_kernel': label, 'analysis_only': a.analysis_only,
+          'vendor_base_kernel': label, 'selected_target': selected_target, 'analysis_only': a.analysis_only,
           'clang_constraint': clang_constraint, 'files': {}}
 for name in required:
     source = out / name
@@ -122,7 +128,7 @@ kernel_filegroup(
 (package / 'BUILD.bazel').write_text(build)
 # Keep the original common symbol-list target; it only supplies text files.
 text = text.replace(anchor,
-    f'        base_kernel = "{label}" if target == "sun_perf" else base_kernel,\n')
+    f'        base_kernel = "{label}" if target == "{selected_target}" else base_kernel,\n')
 macro.write_text(text)
 # The upstream full builder normally creates these before invoking Bazel.
 for name, target in [('msm_kernel_extensions.bzl', '../msm-kernel/msm_kernel_extensions.bzl'),

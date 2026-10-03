@@ -13,14 +13,14 @@ prepare_options=()
 if [[ "$analysis_only" == true ]]; then prepare_options+=(--analysis-only); fi
 if [[ "$fast" == true ]]; then
   "$workspace/kernel_platform/oplus/bazel/oplus_modules_variant.sh" "$platform" "$variant"
-  python3 "$script_dir/al1s_fast_prebuilt.py" "$workspace" "${prepare_options[@]}"
+  python3 "$script_dir/al1s_fast_prebuilt.py" "$workspace" --platform "$platform" --variant "$variant" "${prepare_options[@]}"
 fi
 cd "$workspace/kernel_platform"
 target="//vendor/qcom/opensource/display-drivers:${platform}_${variant}_display_drivers_dist"
 if [[ ! -e vendor && ! -L vendor ]]; then
   ln -s ../vendor vendor
 fi
-test -f vendor/qcom/opensource/display-drivers/oplus/SM8750/al1s_originos.c
+test -s "$workspace/al1s-originos-patch.json"
 # Keep vendor builds sandboxed: native Oplus relative includes depend on it.
 export TEST_TMPDIR="$workspace/bazel-cache"
 options=(
