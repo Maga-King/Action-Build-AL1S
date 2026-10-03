@@ -1,0 +1,71 @@
+OriginOS / OnePlus 13 unified brightness ABI v1 (experimental)
+============================================================
+
+Target: OnePlus 13 SM8750, oneplus_13_b, ORIGINOS_DLKM=true.
+This is an additive extension to al1s_originos.c, compiled into msm_drm.ko.
+It does NOT replace the OnePlus backlight, HBM, fingerprint, AOD, demura,
+temperature compensation, panel command sets, thermal limits or CWB paths.
+Existing AL1S nodes and their handlers are unchanged.
+
+New primary-display-only read-only nodes (0444):
+  /sys/lcm/bl_level                 panel->bl_config.bl_level
+  /sys/lcm/hbm_max_brightness       panel->bl_config.bl_max_level
+  /sys/lcm/normal_max_brightness    Oplus bl_normal_max_level
+  /sys/lcm/oled_hbm                 Oplus GLOBAL HBM software status
+  /sys/lcm/al1s_bl_abi               1
+
+bl_level is the native driver's tracked requested DBV; it is not a direct
+DDIC measurement. oled_hbm is not fingerprint/local HBM and is not a vivo
+multi-level HBM command interface. No writes are supported by these nodes.
+No second display is fabricated; the existing /sys/lcm1 ABI is not changed.
+No timers, workqueues, polling, force-brightness writes or new driver exports.
+Panel pointer absence returns ENODEV rather than inventing a brightness.
+The optional group failing to register does not remove working AOD nodes.
+
+Paired userspace requirements (captured OriginOS PD2620 Android 17):
+  LcmSreConfig Version=4, OP13 panel mapping and DBV range 3515..4094
+  vivo.software.brightness.policy/hbm_bl_lvl=true
+  vivo.software.brightness.unified_mapping enabled
+  hbm_bl_diming=false (framework callback path, no legacy node writer)
+  Vivo-specific peak/ORE/DDIC enhancement is not implemented by this ABI.
+
+Audited framework path:
+  isLcmSreEnable: with Version>0 and hbm_bl_lvl, needs readable bl_level.
+  checkAndUpdateHbmLevel -> setHbmState -> setHbmBrightness
+  unified mapping -> ILcmBrightnessCallback.onLcmBrightnessChanged
+  VivoLcmBrightnessController / DPC -> SurfaceFlinger / HWC -> existing
+  OnePlus display commit and panel backlight / global HBM implementation.
+  oled_hbm existence also enables HBM settings observers; this paired route
+  does not issue writes to the legacy oled_hbm node.
+
+Do NOT set hbm_bl_lvl=false as a fallback: that selects updateHbmToLcm,
+which writes legacy vivo level commands to oled_hbm instead of the callback.
+Do NOT enable this userspace pairing for a ROM lacking unified mapping.
+Do NOT hot-unload/replace a running msm_drm.ko. It is loaded early; a normal
+late Magisk mount cannot replace an already-loaded display driver.
+Use a matching AL1S kernel and vendor display module. The existing boot Image
+can be kept when rebuilding only msm_drm against its saved FAST base outputs;
+there is no new common-kernel code or export requirement in this extension.
+Do not force vermagic. Early vendor module deployment still requires care.
+
+Reference provenance:
+  OnePlusOSS/android_kernel_modules_and_devicetree_oneplus_sm8750
+  oneplus/sm8750_b_16.0.0_oneplus_13
+  d50b305f7da9e14715a25120a4ac7b1a4b8b97c3
+  vivo official opensource.vivo.com project 114, source 108,
+  android_16.0_kernel_SM8750 (iQOO13 / X200 Ultra / Neo10 Pro+ / Neo11).
+  That public tarball contains common kernel 6.6.56 and its backlight core,
+  NOT vivo's private downstream DSI/SRE display implementation. The latter
+  ABI is inferred from the supplied OriginOS framework, not claimed copied
+  from an unavailable vivo SM8750 display driver. No older vivo SoC code used.
+
+Status: experimental source; device acceptance still required. Static source
+tests do not prove a kernel build, correct vendor KMI, boot success or HBM.
+
+2026-10-03: full al1s_originos.c compiled to AArch64 .o with LLVM18, local
+prepared common 6.6.89 headers and official OP13 SM8750 display/QCOM headers.
+No stubs used. This is compile-only: production DDK link, modpost, matching
+AL1S KMI and device validation are still required. Do not load the smoke .o.
+Old oled_ore compatibility state is intentionally unchanged. With LTM absent,
+the framework can still issue bounded legacy ORE transitions; real ORE support
+and its runtime cost remain an explicit limitation, not an HBM capability.
