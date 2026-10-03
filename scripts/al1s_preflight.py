@@ -5,8 +5,14 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import argparse
 
-workspace = Path(sys.argv[1]).resolve(strict=True)
+p = argparse.ArgumentParser()
+p.add_argument('workspace', type=Path)
+p.add_argument('platform')
+p.add_argument('variant')
+a = p.parse_args()
+workspace = a.workspace.resolve(strict=True)
 platform = workspace / 'kernel_platform'
 macro = platform / 'msm-kernel/msm_kernel_la.bzl'
 package = platform / 'build/kernel/kleaf/al1s_fast_prebuilt'
@@ -17,7 +23,7 @@ original = macro.read_bytes()
 try:
     result = subprocess.run([
         'bash', str(Path(__file__).with_name('al1s_build_display.sh')),
-        str(workspace), 'sun', 'perf', 'true'],
+        str(workspace), a.platform, a.variant, 'true'],
         env=dict(os.environ, AL1S_ANALYSIS_ONLY='true'))
     raise SystemExit(result.returncode)
 finally:

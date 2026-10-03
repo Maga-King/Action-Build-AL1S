@@ -115,7 +115,7 @@ on:
         default: true
       ORIGINOS_DLKM:
         type: boolean
-        description: "OriginOS兼容节点及显示适配，仅编入vendor_dlkm（不限制机型）；关闭为普通内核//OriginOS vendor_dlkm adapter (no device allow-list)"
+        description: "OriginOS兼容节点/KO加料（高通专属），使用所选机型源码//Qualcomm OriginOS vendor_dlkm adapter"
         required: true
         default: false
       LZ4_UPDATE:
@@ -1182,7 +1182,8 @@ jobs:
         run: |
           python3 "$GITHUB_WORKSPACE/kernel_workspace/Action-Build/scripts/al1s_patch_vendor_dlkm.py" \
             "$GITHUB_WORKSPACE/kernel_workspace" \
-            "$GITHUB_WORKSPACE/kernel_workspace/Action-Build/patches/originos/al1s_originos.c"
+            "$GITHUB_WORKSPACE/kernel_workspace/Action-Build/patches/originos/al1s_originos.c" \
+            --soc "${{ env.CPU }}"
 
       - name: Custom BUILD_TIME
         if: ${{ github.event.inputs.BUILD_TIME != '-1' }}
@@ -1219,7 +1220,8 @@ jobs:
       - name: Preflight OriginOS module graph
         if: ${{ inputs.ORIGINOS_DLKM && inputs.FAST_BUILD }}
         run: |
-          python3 "$GITHUB_WORKSPACE/kernel_workspace/Action-Build/scripts/al1s_preflight.py" "$GITHUB_WORKSPACE/kernel_workspace"
+          python3 "$GITHUB_WORKSPACE/kernel_workspace/Action-Build/scripts/al1s_preflight.py" \
+            "$GITHUB_WORKSPACE/kernel_workspace" "${{ env.CPUD }}" "${{ env.BUILD_METHOD }}"
 
       - name: Restore saved FAST kernel
         if: ${{ inputs.FAST_BASE_RUN != '' }}

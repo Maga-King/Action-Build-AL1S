@@ -4,14 +4,18 @@ import argparse
 import importlib.util
 import logging
 import os
+import re
 from pathlib import Path
 
 p = argparse.ArgumentParser()
 p.add_argument('workspace', type=Path)
-p.add_argument('platform', choices=['sun'])
-p.add_argument('variant', choices=['perf'])
+p.add_argument('platform')
+p.add_argument('variant')
 p.add_argument('fast', choices=['true', 'false'])
 a = p.parse_args()
+for value in (a.platform, a.variant):
+    if not re.fullmatch(r'[a-zA-Z0-9_]+', value):
+        raise SystemExit('Invalid platform/variant: ' + value)
 workspace = a.workspace.resolve()
 os.chdir(workspace)
 # Resolve the upstream symlink so its __file__-based workspace remains correct.
