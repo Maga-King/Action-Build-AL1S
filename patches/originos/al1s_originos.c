@@ -16,6 +16,8 @@
 #include "../../msm/dsi/dsi_display.h"
 #include "oplus_onscreenfingerprint.h"
 #include "oplus_display_utils.h"
+#include "oplus_display_bl.h"
+#include "include/oplus_display.h"
 
 void al1s_originos_init(void);
 void al1s_originos_exit(void);
@@ -25,6 +27,61 @@ static struct device *soc1_dev;
 static struct class *fuel_class;
 static unsigned int cpu_type;
 static DEFINE_MUTEX(display_lock);
+
+/* Additional, read-only primary-panel ABI for OriginOS unified mapping.
+ * No backlight writer, worker, timer, HBM override or shadow brightness state.
+ * Keep the pre-existing compatibility nodes (including AOD) unchanged.
+ */
+static bool brightness_group_created;
+
+static ssize_t brightness_show(struct kobject *k, struct kobj_attribute *a,
+			       char *buf)
+{
+	struct dsi_display *display;
+	struct dsi_panel *panel;
+	u32 value;
+
+	if (!strcmp(a->attr.name, "al1s_bl_abi"))
+		return sysfs_emit(buf, "1\n");
+	/* OP13 has one internal panel. Do not alias lcm1 to the primary panel. */
+	display = get_main_display();
+	if (!display || !display->panel)
+		return -ENODEV;
+	panel = display->panel;
+	mutex_lock(&panel->panel_lock);
+	if (!strcmp(a->attr.name, "bl_level"))
+		value = panel->bl_config.bl_level;
+	else if (!strcmp(a->attr.name, "hbm_max_brightness"))
+		value = panel->bl_config.bl_max_level;
+	else if (!strcmp(a->attr.name, "normal_max_brightness"))
+		value = panel->oplus_panel.bl_cfg.bl_normal_max_level;
+	else if (!strcmp(a->attr.name, "oled_hbm"))
+		value = !!oplus_display_panel_get_global_hbm_status();
+	else {
+		mutex_unlock(&panel->panel_lock);
+		return -EINVAL;
+	}
+	mutex_unlock(&panel->panel_lock);
+	/* bl_level is driver-tracked requested DBV, not a DDIC/photometer read. */
+	return sysfs_emit(buf, "%u\n", value);
+}
+
+#define BRIGHTNESS_RO(n) \
+	static struct kobj_attribute brightness_##n = \
+		__ATTR(n, 0444, brightness_show, NULL)
+BRIGHTNESS_RO(bl_level);
+BRIGHTNESS_RO(hbm_max_brightness);
+BRIGHTNESS_RO(normal_max_brightness);
+BRIGHTNESS_RO(oled_hbm);
+BRIGHTNESS_RO(al1s_bl_abi);
+static struct attribute *brightness_attrs[] = {
+	&brightness_bl_level.attr, &brightness_hbm_max_brightness.attr,
+	&brightness_normal_max_brightness.attr, &brightness_oled_hbm.attr,
+	&brightness_al1s_bl_abi.attr, NULL,
+};
+static const struct attribute_group brightness_group = {
+	.attrs = brightness_attrs,
+};
 
 static ssize_t read_metric(const char *path, char *buf)
 {
@@ -326,6 +383,10 @@ static int make_root_group(const char *name, struct kobject **out,
 void al1s_originos_exit(void)
 {
 	int i;
+	if (brightness_group_created && lcm_kobj[0]) {
+		sysfs_remove_group(lcm_kobj[0], &brightness_group);
+		brightness_group_created = false;
+	}
 	for (i = 0; i < 2; i++) {
 		if (lcm_kobj[i]) {
 			sysfs_remove_group(lcm_kobj[i], &display_group);
@@ -380,6 +441,12 @@ void al1s_originos_init(void)
 	if (ret) goto fail;
 	ret = make_root_group("lcm1", &lcm_kobj[1], &display_group);
 	if (ret) goto fail;
+	/* Failure of the optional brightness ABI must not remove working AOD ABI. */
+	ret = sysfs_create_group(lcm_kobj[0], &brightness_group);
+	if (ret)
+		pr_warn("AL1S OriginOS: unified brightness ABI unavailable: %d\n", ret);
+	else
+		brightness_group_created = true;
 	pr_info("AL1S OriginOS: compatibility ABI ready in msm_drm (vendor_dlkm)\n");
 	return;
 fail:
