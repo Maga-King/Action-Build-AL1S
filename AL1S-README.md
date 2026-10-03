@@ -1,4 +1,4 @@
-# AL1S / OnePlus 13
+# AL1S / Qualcomm OnePlus OriginOS compatibility
 
 This fork adds two independent inputs to **Build All OnePlus Kernels**, on the
 `KernelSU-Next` branch. All compilation runs on GitHub Actions.
@@ -6,17 +6,31 @@ This fork adds two independent inputs to **Build All OnePlus Kernels**, on the
 | Input | Default | Effect |
 |---|---|---|
 | `NOMOUNT` | on | Build upstream `maxsteeel/nomount` into the kernel, pinned to `6b1be186322d4e0bdc465cf27f6fc0d3679087c6`. Runtime activation still needs the matching NoMount userspace module. |
-| `ORIGINOS_DLKM` | off | Add the OriginOS compatibility ABI to OnePlus 13's **vendor `msm_drm.ko`**, including the information nodes previously implemented in the 13T boot kernel. Currently restricted to `oneplus_13_b`. Builds the matching external display module after the upstream kernel build. |
+| `ORIGINOS_DLKM` | off | KO add-ons (Qualcomm only): inject the shared OriginOS ABI into the selected device's **vendor `msm_drm.ko`**, including the information nodes previously implemented in the 13T boot kernel. Builds the matching external display module after the kernel build. No phone-model whitelist. |
 
 With `ORIGINOS_DLKM=off`, no compatibility source, init/exit hook or extra KMI entries are injected.
 NoMount and the existing kernel options remain independently selectable.
+
+The workflow's selected FILE still selects its official manifest/source tree.
+The adapter directory follows the manifest CPU (or the older flat oplus/
+layout); kernel/display targets follow CPUD and BUILD_METHOD. Nothing falls
+back to OnePlus 13 sources. No model-specific node list is needed.
+This is not a claim that every Qualcomm source generation is already tested:
+the selected source must provide the QCOM display DDK/Kleaf layout and the
+Oplus functions/fields used by the shared adapter. Older incompatible APIs
+will produce a source/compile error, not stubbed successful hardware calls.
+MediaTek does not use this msm_drm adapter. Leave this option off there.
+Source injection was tested with official OnePlus 13 and 13T Android 16 trees;
+other-SoC routing tests are synthetic, not successful hardware builds.
 
 ## OriginOS interface scope
 
 - `/sys/fp_id/fp_id`: compatibility identity `ultrasonic_fake_nyako`.
 - `/sys/ufs/ufsid`: forwards `/sys/devices/soc0/serial_number`.
 - `/sys/cpu_info` and `/sys/devices/soc1`: CPU identity/frequency display tables;
-  the writable `type` field does not change CPU clocks.
+  the writable `type` field does not change CPU clocks. The existing compatibility
+  table still returns 8 Elite, 8 cores, 4.32/4.47 GHz; it is not live CPU discovery
+  and must not be interpreted as truthful identification on another SoC.
 - `/sys/class/fuelsummary/{soh,cycle}`: forwards Oplus battery metrics.
 - `/sys/lcm` and `/sys/lcm1`: 23 display attributes each, sharing compatibility
   state. Full/partial AOD and fingerprint low-power AOD use the existing Oplus
@@ -31,7 +45,7 @@ fingerprint authentication/TEE or replace the system/ODM HALs and scripts.
 
 The adapter is a source reimplementation based on local inspection of the 13T
 OriginOS ABI. The original 13T binary is not redistributed. It keeps the
-OnePlus 13 display source and panel configuration, and introduces no runtime
+selected device's display source and panel configuration, and introduces no runtime
 symbol-address hooks. A node initialization failure is logged and rolled back
 without preventing the native display driver from loading.
 
@@ -51,7 +65,7 @@ With `ORIGINOS_DLKM=off`, the upstream deny policy remains unchanged.
 `FAST_BUILD` runs the upstream **Build Kernel FAST** step unchanged, including
 its direct make/ccache implementation. Its `common/out` kernel, symbol tables
 and modules are packaged as a local Kleaf prebuilt base for the vendor module
-build. Only `sun_perf`'s `base_kernel` is redirected; the official vendor
+build. Only the selected `<CPUD>_<BUILD_METHOD>` base is redirected; the official vendor
 configuration and display DDK are retained. A Bazel action-graph check refuses
 to proceed if that module build would compile a second common/GKI kernel.
 
@@ -59,8 +73,8 @@ The module build uses the ordinary sandboxed execution mode. Kleaf
 `--config=fast` is no longer used: its local mode broke native Oplus UFS relative
 header includes. Vendor module compilation adds time after the upstream fast
 kernel build. If upstream requests fallback, the full kernel path is used.
-With fast builds disabled, the exact 4K target `//msm-kernel:sun_perf_dist`
-avoids the upstream fuzzy query's unnecessary `sun16k_perf_dist` build.
+With fast builds disabled, the exact selected target
+`//msm-kernel:<CPUD>_<BUILD_METHOD>_dist` avoids unrelated fuzzy-query targets.
 
 Before FAST compilation, a real Bazel `aquery` validates the complete vendor
 dependency graph using temporary analysis-only inputs. It checks toolchain
@@ -83,9 +97,12 @@ also fixes the upstream configuration branch which enabled `CONFIG_KPM` for
 
 ## Outputs and verification
 
-The existing AnyKernel3 artifact packages the kernel. When OriginOS is enabled,
+The existing AnyKernel3 artifact packages/flashes the kernel ONLY, not the
+display module or its compatibility nodes. Its installer has do.modules=0.
+No display-module installer is added by the multi-model routing change.
+When OriginOS is enabled,
 an additional step builds the external display DDK target
-`//vendor/qcom/opensource/display-drivers:sun_perf_display_drivers_dist`
+`//vendor/qcom/opensource/display-drivers:<CPUD>_<BUILD_METHOD>_display_drivers_dist`
 against that kernel. The separate `AL1S-OriginOS-msm_drm-*` artifact contains only the patched
 `msm_drm.ko`. The configured Clang toolchain strips debug information; every
 allocated ELF section is checked for unchanged contents. Size and SHA256 are
