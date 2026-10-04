@@ -13,9 +13,11 @@ official signature acceptance values.
 `KSU_STATIC_SELINUX_REFERENCE` is labelled with the same dedicated-platform
 warning as the KernelSU-Next branch and defaults to false. Enabling it sets
 `CONFIG_KSU_STATIC_SELINUX_REFERENCE=y`; disabling it explicitly sets `n`.
-All existing device selections can use the option; no CPU validation or new
-test/verification step is added to the build workflow. There are 23 inputs,
-below GitHub's 25-input limit. Existing cleanup/cache switches are retained.
+All existing device selections can use the static-reference option; no CPU
+or ROM gating is added for it. Existing OriginOS guards and preflight checks
+are ported unchanged from the KSUN branch. There are 24 inputs,
+below GitHub's 25-input limit. Cleanup/cache disabling switches are removed,
+with cleanup and caching remaining enabled.
 
 The feature only changes SELinux Hide's backup/query reference. Active
 enforcement is unchanged. Enable the normal `selinux_hide` runtime feature
@@ -31,3 +33,11 @@ unmodified Numbersf repository.
 No install-time network risk scanner was found in this official ksud version,
 so no extra off switch or daemon patch is needed. Kernel compile checks, if
 run, use the fork's separate compile-only workflow, not this build pipeline.
+
+The KernelSU branch now also carries the common AL1S build features from
+KernelSU-Next: NoMount, the optional OnePlus 13 OriginOS msm_drm adapter,
+external display DDK build, FAST prebuilt/resume, KMI namespace handling,
+and stripped msm_drm-only artifact. KernelSU-specific source, SUSFS patching,
+Manager download, and artifact naming remain intact. OriginOS DLKM defaults
+to off and remains restricted to oneplus_13_b. The static-reference option
+is independent and retains its default of false.

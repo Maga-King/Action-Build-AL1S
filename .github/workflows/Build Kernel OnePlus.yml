@@ -6,7 +6,7 @@ on:
         type: choice
         description: "配置文件//Configuration file"
         required: true
-        default: oneplus_15
+        default: oneplus_13_b
         options:
           - oneplus_nord_n30_se_5g_v
           - oneplus_10r_v
@@ -69,7 +69,7 @@ on:
         type: choice
         description: "SUSFS模块下载调用方向//SUSFS module branch"
         required: true
-        default: CI
+        default: N/A
         options:
           - CI
           - Release
@@ -78,7 +78,7 @@ on:
         type: choice
         description: "内核模块实现方式//Kernel module implementation method"
         required: true
-        default: KPN
+        default: N/A
         options:
           - KPM
           - KPN
@@ -87,7 +87,7 @@ on:
         type: string
         description: "回退SUSFS(输入哈希或次数或-1关闭)//Rollback SUSFS (Enter commit hash, count, or -1 to disable)"
         required: false
-        default: ""
+        default: "-1"
       DYNAMIC_REPO:
         type: string
         description: "动态清单仓库所有者//Manifest repository owner"
@@ -108,6 +108,16 @@ on:
         description: "静态 SELinux 参考策略（高通8E专用）"
         required: true
         default: false
+      NOMOUNT:
+        type: boolean
+        description: "启用 NoMount 内核支持（独立于 OriginOS）//Enable NoMount kernel support"
+        required: true
+        default: true
+      ORIGINOS_DLKM:
+        type: boolean
+        description: "一加13 OriginOS兼容节点及显示适配，仅编入vendor_dlkm；关闭为普通内核//OP13 OriginOS vendor_dlkm adapter"
+        required: true
+        default: false
       LZ4_UPDATE:
         type: boolean
         description: "是否升级LZ4到上游最新？//Upgrade LZ4 to the latest upstream?"
@@ -122,7 +132,7 @@ on:
         type: string
         description: "自定义内核后缀(不输入使用RAND_STR或-1关闭)//Custom kernel suffix (Leave blank to use RAND_STR, or -1 to disable)"
         required: false
-        default: ""
+        default: "AL1S"
       RESUBLEVEL:
         description: "自定义内核等级欺骗(SUBLEVEL)//Custom kernel SUBLEVEL spoofing"
         required: false
@@ -132,6 +142,11 @@ on:
         description: "是否启用极速构建？//Enable ultra-fast build?"
         required: true
         default: true
+      FAST_BASE_RUN:
+        type: string
+        description: "复用已保存的 FAST 内核运行 ID（不需要就留空）//Reuse saved FAST base run ID"
+        required: false
+        default: ""
       LSM_BBG:
         type: boolean
         description: "是否启用关键分区写入保护模块(BBG)？//Enable critical partition write protection module (BBG)?"
@@ -156,12 +171,12 @@ on:
         type: boolean
         description: "是否添加风驰驱动1.0？//Add Fengchi (HMBIRD) Driver 1.0?"
         required: true
-        default: false
+        default: true
       DROID_SPACES:
         type: boolean
         description: "是否添加轻量级Linux容器支持(DroidSpaces)？//Add lightweight Linux container support (DroidSpaces)?"
         required: true
-        default: false
+        default: true
       RE_KERNEL:
         type: boolean
         description: "是否添加Re-Kernel？//Add Re-Kernel?"
@@ -172,20 +187,10 @@ on:
         description: "是否拉取SUSFS-DEV分支？//Pull the SUSFS-DEV branch?"
         required: true
         default: false
-      SPACE_NOCLEAN:
-        type: boolean
-        description: "是否停用空间清扫？//Disable workspace cleaning?"
-        required: true
-        default: false
-      BUILD_NOCACHE:
-        type: boolean
-        description: "是否停用此次缓存？//Disable caching for this build?"
-        required: true
-        default: false
 
 jobs:
   build:
-    name: ${{ github.event.inputs.FAST_BUILD == 'true' && ' [FAST]' || '' }}${{ contains(github.event.inputs.FILE, '_aosp') && ' [AOSP]' || '' }}${{ github.event.inputs.KPM == 'KPM' && ' [KPM]' || github.event.inputs.KPM == 'KPN' && ' [KPN]' || '' }}${{ github.event.inputs.LSM_BBG == 'true' && ' [BBG]' || '' }}${{ github.event.inputs.SCHED_HMBIRD == 'true' && ' [HMBIRD]' || '' }}${{ github.event.inputs.DROID_SPACES == 'true' && ' [DS]' || '' }}${{ startsWith(github.event.inputs.ZRAM, '1/') && ' [ZRAM]' || '' }}${{ github.event.inputs.RE_KERNEL == 'true' && ' [REKER]' || '' }}${{ github.event.inputs.LZ4_UPDATE == 'true' && ' [LZ4UPD]' || '' }}${{ inputs.KSU_STATIC_SELINUX_REFERENCE && ' [Static-SELinux]' || '' }}For ${{ github.event.inputs.FILE }} ${{ github.event.inputs.SUFFIX }}
+    name: ${{ github.event.inputs.FAST_BUILD == 'true' && ' [FAST]' || '' }}${{ contains(github.event.inputs.FILE, '_aosp') && ' [AOSP]' || '' }}${{ github.event.inputs.KPM == 'KPM' && ' [KPM]' || github.event.inputs.KPM == 'KPN' && ' [KPN]' || '' }}${{ github.event.inputs.LSM_BBG == 'true' && ' [BBG]' || '' }}${{ github.event.inputs.SCHED_HMBIRD == 'true' && ' [HMBIRD]' || '' }}${{ github.event.inputs.DROID_SPACES == 'true' && ' [DS]' || '' }}${{ startsWith(github.event.inputs.ZRAM, '1/') && ' [ZRAM]' || '' }}${{ github.event.inputs.RE_KERNEL == 'true' && ' [REKER]' || '' }}${{ github.event.inputs.LZ4_UPDATE == 'true' && ' [LZ4UPD]' || '' }}${{ inputs.NOMOUNT && ' [NoMount]' || '' }}${{ inputs.ORIGINOS_DLKM && ' [OriginOS-DLKM]' || '' }}${{ inputs.KSU_STATIC_SELINUX_REFERENCE && ' [Static-SELinux]' || '' }}For ${{ github.event.inputs.FILE }} ${{ github.event.inputs.SUFFIX }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -203,7 +208,6 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Maximize Build Space
-        if: ${{ github.event.inputs.SPACE_NOCLEAN == 'false' }}
         env:
           ROOT_RESERVE_MB: '8192'
           TEMP_RESERVE_MB: '2048'
@@ -221,6 +225,33 @@ jobs:
           git clone --no-checkout "https://github.com/${GITHUB_REPOSITORY}.git" Action-Build
           git -C Action-Build fetch --depth=1 origin "$GITHUB_SHA"
           git -C Action-Build checkout --detach "$GITHUB_SHA"
+          test -f Action-Build/scripts/al1s_nomount.sh
+          test -f Action-Build/scripts/al1s_patch_vendor_dlkm.py
+          test -f Action-Build/scripts/al1s_collect_dlkm.py
+          test -f Action-Build/patches/originos/al1s_originos.c
+
+      - name: Validate AL1S options
+        env:
+          ORIGINOS_DLKM: ${{ inputs.ORIGINOS_DLKM }}
+          FILE: ${{ inputs.FILE }}
+          FAST_BASE_RUN: ${{ inputs.FAST_BASE_RUN }}
+          FAST_BUILD: ${{ inputs.FAST_BUILD }}
+        run: |
+          if [[ "$ORIGINOS_DLKM" == "true" && "$FILE" != "oneplus_13_b" ]]; then
+            echo "::error::OriginOS DLKM currently targets oneplus_13_b only."
+            exit 1
+          fi
+          if [[ -n "$FAST_BASE_RUN" ]]; then
+            if [[ ! "$FAST_BASE_RUN" =~ ^[0-9]+$ || "$FAST_BUILD" != "true" || "$ORIGINOS_DLKM" != "true" ]]; then
+              echo "::error::FAST_BASE_RUN requires a numeric run ID, FAST_BUILD and ORIGINOS_DLKM."
+              exit 1
+            fi
+            echo "Reusing saved FAST base from run $FAST_BASE_RUN; kernel options must match that build."
+          fi
+          echo "OriginOS DLKM=${ORIGINOS_DLKM}; no SELinux spoofing is included."
+          if [[ "$ORIGINOS_DLKM" == "true" ]]; then
+            echo "OriginOS display modules reuse Build Kernel FAST outputs when FAST_BUILD is enabled."
+          fi
 
       - name: Extract Manifest Info
         id: extract_info
@@ -381,7 +412,6 @@ jobs:
           free -h
 
       - name: Set Cache Environment
-        if: ${{ github.event.inputs.BUILD_NOCACHE == 'false' }}
         run: |
           echo "CCACHE_DIR=$HOME/.ccache_${{ github.event.inputs.FILE }}" >> $GITHUB_ENV
           mkdir -p "$HOME/.ccache_${{ github.event.inputs.FILE }}"
@@ -426,7 +456,6 @@ jobs:
          sudo cp -f "$LIB_DIR/ccache" /usr/bin/ccache && sudo chmod +x /usr/bin/ccache
 
       - name: Restore Ccache
-        if: ${{ github.event.inputs.BUILD_NOCACHE == 'false' }}
         id: restore-ccache
         uses: actions/cache/restore@v5
         with:
@@ -434,7 +463,7 @@ jobs:
           key: ccache-${{ runner.os }}-${{ github.ref_name }}-${{ github.event.inputs.FILE }}-${{ env.BUILD_METHOD }}-${{ github.event.inputs.FAST_BUILD == 'true' && 'alpha' || 'beta' }}-17.0
 
       - name: Restore ThinLTO Cache
-        if: ${{ github.event.inputs.BUILD_NOCACHE == 'false' && github.event.inputs.FAST_BUILD == 'true' }}
+        if: ${{ github.event.inputs.FAST_BUILD == 'true' }}
         id: restore-thinlto
         uses: actions/cache/restore@v5
         with:
@@ -442,7 +471,6 @@ jobs:
           key: thinlto-${{ runner.os }}-${{ github.ref_name }}-${{ github.event.inputs.FILE }}-17.0
 
       - name: Initialize Ccache
-        if: ${{ github.event.inputs.BUILD_NOCACHE == 'false' }}
         run: |
           INIT_FLAG="${{ env.CCACHE_DIR }}/.ccache_initialized"
           if command -v ccache >/dev/null 2>&1; then
@@ -1023,10 +1051,10 @@ jobs:
           fi
 
           # KPM配置
-          if [ "${{ github.event.inputs.KPM }}" = "KPM" ] || [ "${{ github.event.inputs.KPM }}" = "N/A" ]; then
+          if [ "${{ github.event.inputs.KPM }}" = "KPM" ]; then
             set_config "CONFIG_KPM=y"
           fi
-          if [ "${{ github.event.inputs.KPM }}" = "KPN" ]; then
+          if [ "${{ github.event.inputs.KPM }}" != "KPM" ]; then
             set_config "CONFIG_KPM=n"
           fi
 
@@ -1154,6 +1182,17 @@ jobs:
           fi
 
       # Custom kernel build time, without adding #1 SMP PREEMPT 自定义内核构建时间，不要加入#1 SMP PREEMPT
+      - name: Add NoMount support
+        if: ${{ inputs.NOMOUNT }}
+        run: bash "$GITHUB_WORKSPACE/kernel_workspace/Action-Build/scripts/al1s_nomount.sh" "$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/common"
+
+      - name: Add OriginOS compatibility to vendor msm_drm
+        if: ${{ inputs.ORIGINOS_DLKM }}
+        run: |
+          python3 "$GITHUB_WORKSPACE/kernel_workspace/Action-Build/scripts/al1s_patch_vendor_dlkm.py" \
+            "$GITHUB_WORKSPACE/kernel_workspace" \
+            "$GITHUB_WORKSPACE/kernel_workspace/Action-Build/patches/originos/al1s_originos.c"
+
       - name: Custom BUILD_TIME
         if: ${{ github.event.inputs.BUILD_TIME != '-1' }}
         shell: bash
@@ -1186,8 +1225,23 @@ jobs:
           echo "Disabling GPUEB for MTK kernel 5.10"
           sed -i '/obj-y.*gpueb/d' kernel_workspace/kernel-5.10/drivers/gpu/mediatek/Makefile
 
+      - name: Preflight OriginOS module graph
+        if: ${{ inputs.ORIGINOS_DLKM && inputs.FAST_BUILD }}
+        run: |
+          python3 "$GITHUB_WORKSPACE/kernel_workspace/Action-Build/scripts/al1s_preflight.py" "$GITHUB_WORKSPACE/kernel_workspace"
+
+      - name: Restore saved FAST kernel
+        if: ${{ inputs.FAST_BASE_RUN != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          pattern: AL1S-FAST-base-${{ inputs.FILE }}-*
+          merge-multiple: true
+          run-id: ${{ inputs.FAST_BASE_RUN }}
+          github-token: ${{ github.token }}
+          path: kernel_workspace/kernel_platform/common/out
+
       - name: Build Kernel FAST
-        if: ${{ github.event.inputs.FAST_BUILD == 'true' }}
+        if: ${{ github.event.inputs.FAST_BUILD == 'true' && inputs.FAST_BASE_RUN == '' }}
         id: fast_build
         run: |
           cd kernel_workspace/kernel_platform
@@ -1314,7 +1368,7 @@ jobs:
           fi
 
           LD_WRAPPER=""
-          if [ "${{ github.event.inputs.BUILD_NOCACHE }}" = "false" ] && [[ "$KERNEL_VERSION" == 5.* ]]; then
+          if [[ "$KERNEL_VERSION" == 5.* ]]; then
             LDCACHE_DIR="${GITHUB_WORKSPACE}/kernel_workspace/.thinlto-cache"
             mkdir -p "$LDCACHE_DIR"
             LD_WRAPPER="${GITHUB_WORKSPACE}/kernel_workspace/ld-wrapper"
@@ -1389,17 +1443,61 @@ jobs:
           make -j"$(nproc --all)" O=out "${MAKE_ARGS[@]}"
           ccache -s
 
+      - name: Preserve completed FAST kernel
+        if: ${{ inputs.ORIGINOS_DLKM && inputs.FAST_BUILD && inputs.FAST_BASE_RUN == '' && steps.fast_build.outputs.fallback != 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: AL1S-FAST-base-${{ inputs.FILE }}-${{ github.run_number }}
+          compression-level: 1
+          include-hidden-files: true
+          if-no-files-found: error
+          path: |
+            kernel_workspace/kernel_platform/common/out/vmlinux
+            kernel_workspace/kernel_platform/common/out/System.map
+            kernel_workspace/kernel_platform/common/out/Module.symvers
+            kernel_workspace/kernel_platform/common/out/vmlinux.symvers
+            kernel_workspace/kernel_platform/common/out/modules.*
+            kernel_workspace/kernel_platform/common/out/.config
+            kernel_workspace/kernel_platform/common/out/include/config/kernel.release
+            kernel_workspace/kernel_platform/common/out/arch/arm64/boot/Image
+            kernel_workspace/kernel_platform/common/out/**/*.ko
+
       - name: Fallback to Build Kernel
         if: ${{ github.event.inputs.FAST_BUILD == 'false' || steps.fast_build.outputs.fallback == 'true' }}
         run: |
           cd kernel_workspace
           if [ -f ./kernel_platform/build_with_bazel.py ]; then
             ./kernel_platform/oplus/bazel/oplus_modules_variant.sh ${{ env.CPUD }} ${{ env.BUILD_METHOD }}
-            ./kernel_platform/build_with_bazel.py -t ${{ env.CPUD }} ${{ env.BUILD_METHOD }}
+            if [[ "${{ inputs.ORIGINOS_DLKM }}" == "true" ]]; then
+              python3 "$GITHUB_WORKSPACE/kernel_workspace/Action-Build/scripts/al1s_build_kernel.py" \
+                "$GITHUB_WORKSPACE/kernel_workspace" "${{ env.CPUD }}" "${{ env.BUILD_METHOD }}" "false"
+            else
+              ./kernel_platform/build_with_bazel.py -t ${{ env.CPUD }} ${{ env.BUILD_METHOD }}
+            fi
           else
             LTO=thin SYSTEM_DLKM_RE_SIGN=0 BUILD_SYSTEM_DLKM=0 KMI_SYMBOL_LIST_STRICT_MODE=0 \
             ./kernel_platform/oplus/build/oplus_build_kernel.sh ${{ env.CPUD }} ${{ env.BUILD_METHOD }}
           fi
+
+      - name: Build OriginOS external display DDK module
+        if: ${{ inputs.ORIGINOS_DLKM }}
+        run: |
+          bash "$GITHUB_WORKSPACE/kernel_workspace/Action-Build/scripts/al1s_build_display.sh" \
+            "$GITHUB_WORKSPACE/kernel_workspace" "${{ env.CPUD }}" "${{ env.BUILD_METHOD }}" "${{ inputs.FAST_BUILD && steps.fast_build.outputs.fallback != 'true' }}"
+
+      - name: Prepare OriginOS msm_drm module
+        if: ${{ inputs.ORIGINOS_DLKM }}
+        run: |
+          python3 "$GITHUB_WORKSPACE/kernel_workspace/Action-Build/scripts/al1s_collect_dlkm.py" \
+            "$GITHUB_WORKSPACE/kernel_workspace" "$GITHUB_WORKSPACE/AL1S-vendor_dlkm"
+
+      - name: Upload OriginOS msm_drm module
+        if: ${{ inputs.ORIGINOS_DLKM }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: AL1S-OriginOS-msm_drm-${{ inputs.FILE }}-${{ github.run_number }}
+          path: AL1S-vendor_dlkm/msm_drm.ko
+          if-no-files-found: error
 
       - name: Make AnyKernel3
         run: |
@@ -1574,7 +1672,6 @@ jobs:
           path: ZRAM-Module/*
 
       - name: Check Cache Size Before Save
-        if: ${{ github.event.inputs.BUILD_NOCACHE == 'false' }}
         id: cache_size_check
         run: |
           check_size() {
@@ -1597,14 +1694,14 @@ jobs:
           check_size "${{ github.workspace }}/kernel_workspace/.thinlto-cache" "thinlto"
 
       - name: Save Ccache
-        if: ${{ github.event.inputs.BUILD_NOCACHE == 'false' && steps.cache_size_check.outputs.ccache_save == 'true' && steps.restore-ccache.outputs.cache-hit != 'true' }}
+        if: ${{ steps.cache_size_check.outputs.ccache_save == 'true' && steps.restore-ccache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v5
         with:
           path: ${{ env.CCACHE_DIR }}
           key: ccache-${{ runner.os }}-${{ github.ref_name }}-${{ github.event.inputs.FILE }}-${{ env.BUILD_METHOD }}-${{ github.event.inputs.FAST_BUILD == 'true' && 'alpha' || 'beta' }}-17.0
 
       - name: Save ThinLTO Cache
-        if: ${{ github.event.inputs.BUILD_NOCACHE == 'false' && github.event.inputs.FAST_BUILD == 'true' && steps.cache_size_check.outputs.thinlto_save == 'true' && steps.restore-thinlto.outputs.cache-hit != 'true' }}
+        if: ${{ github.event.inputs.FAST_BUILD == 'true' && steps.cache_size_check.outputs.thinlto_save == 'true' && steps.restore-thinlto.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v5
         with:
           path: ${{ github.workspace }}/kernel_workspace/.thinlto-cache
