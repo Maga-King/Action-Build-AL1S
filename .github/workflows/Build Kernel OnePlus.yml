@@ -115,7 +115,7 @@ on:
         default: true
       ORIGINOS_DLKM:
         type: boolean
-        description: "一加13 OriginOS兼容节点及显示适配，仅编入vendor_dlkm；关闭为普通内核//OP13 OriginOS vendor_dlkm adapter"
+        description: "OriginOS兼容节点及显示适配，仅编入vendor_dlkm（不限制机型）；关闭为普通内核//OriginOS vendor_dlkm adapter (no device allow-list)"
         required: true
         default: false
       LZ4_UPDATE:
@@ -232,14 +232,9 @@ jobs:
       - name: Validate AL1S options
         env:
           ORIGINOS_DLKM: ${{ inputs.ORIGINOS_DLKM }}
-          FILE: ${{ inputs.FILE }}
           FAST_BASE_RUN: ${{ inputs.FAST_BASE_RUN }}
           FAST_BUILD: ${{ inputs.FAST_BUILD }}
         run: |
-          if [[ "$ORIGINOS_DLKM" == "true" && "$FILE" != "oneplus_13_b" ]]; then
-            echo "::error::OriginOS DLKM currently targets oneplus_13_b only."
-            exit 1
-          fi
           if [[ -n "$FAST_BASE_RUN" ]]; then
             if [[ ! "$FAST_BASE_RUN" =~ ^[0-9]+$ || "$FAST_BUILD" != "true" || "$ORIGINOS_DLKM" != "true" ]]; then
               echo "::error::FAST_BASE_RUN requires a numeric run ID, FAST_BUILD and ORIGINOS_DLKM."
