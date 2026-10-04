@@ -103,6 +103,11 @@ on:
         description: "管理器分支名(必填)/内置分支名(必填)/回退分支提交哈希版本(留空不修改)//Manager Branch name (Required) / Builtin branch name (Required) / Rollback branch commit hash version (Leave blank to not modify)"
         required: false
         default: "main/main/"
+      KSU_STATIC_SELINUX_REFERENCE:
+        type: boolean
+        description: "静态 SELinux 参考策略（高通8E专用）"
+        required: true
+        default: false
       LZ4_UPDATE:
         type: boolean
         description: "是否升级LZ4到上游最新？//Upgrade LZ4 to the latest upstream?"
@@ -180,9 +185,14 @@ on:
 
 jobs:
   build:
-    name: ${{ github.event.inputs.FAST_BUILD == 'true' && ' [FAST]' || '' }}${{ contains(github.event.inputs.FILE, '_aosp') && ' [AOSP]' || '' }}${{ github.event.inputs.KPM == 'KPM' && ' [KPM]' || github.event.inputs.KPM == 'KPN' && ' [KPN]' || '' }}${{ github.event.inputs.LSM_BBG == 'true' && ' [BBG]' || '' }}${{ github.event.inputs.SCHED_HMBIRD == 'true' && ' [HMBIRD]' || '' }}${{ github.event.inputs.DROID_SPACES == 'true' && ' [DS]' || '' }}${{ startsWith(github.event.inputs.ZRAM, '1/') && ' [ZRAM]' || '' }}${{ github.event.inputs.RE_KERNEL == 'true' && ' [REKER]' || '' }}${{ github.event.inputs.LZ4_UPDATE == 'true' && ' [LZ4UPD]' || '' }}For ${{ github.event.inputs.FILE }} ${{ github.event.inputs.SUFFIX }}
+    name: ${{ github.event.inputs.FAST_BUILD == 'true' && ' [FAST]' || '' }}${{ contains(github.event.inputs.FILE, '_aosp') && ' [AOSP]' || '' }}${{ github.event.inputs.KPM == 'KPM' && ' [KPM]' || github.event.inputs.KPM == 'KPN' && ' [KPN]' || '' }}${{ github.event.inputs.LSM_BBG == 'true' && ' [BBG]' || '' }}${{ github.event.inputs.SCHED_HMBIRD == 'true' && ' [HMBIRD]' || '' }}${{ github.event.inputs.DROID_SPACES == 'true' && ' [DS]' || '' }}${{ startsWith(github.event.inputs.ZRAM, '1/') && ' [ZRAM]' || '' }}${{ github.event.inputs.RE_KERNEL == 'true' && ' [REKER]' || '' }}${{ github.event.inputs.LZ4_UPDATE == 'true' && ' [LZ4UPD]' || '' }}${{ inputs.KSU_STATIC_SELINUX_REFERENCE && ' [Static-SELinux]' || '' }}For ${{ github.event.inputs.FILE }} ${{ github.event.inputs.SUFFIX }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     env:
+      KSU_REPOSITORY: Maga-King/KernelSU
+      KSU_MANAGER_REPOSITORY: tiann/KernelSU
       CCACHE_COMPILERCHECK: "none"
       CCACHE_NOHASHDIR: "true"
       CCACHE_NOHARDLINK: "true"
@@ -208,7 +218,9 @@ jobs:
           git config --global user.name "Numbersf"
           git config --global user.email "263623064@qq.com"
           mkdir kernel_workspace && cd kernel_workspace
-          git clone https://github.com/Numbersf/Action-Build.git -b KernelSU
+          git clone --no-checkout "https://github.com/${GITHUB_REPOSITORY}.git" Action-Build
+          git -C Action-Build fetch --depth=1 origin "$GITHUB_SHA"
+          git -C Action-Build checkout --detach "$GITHUB_SHA"
 
       - name: Extract Manifest Info
         id: extract_info
@@ -336,6 +348,8 @@ jobs:
           echo "Selected KPM: ${{ github.event.inputs.KPM }}"
           echo "Custom SUSFS_META: ${{ github.event.inputs.SUSFS_META }}"
           echo "Custom KSU_META: ${{ github.event.inputs.KSU_META }}"
+          echo "KernelSU source: $KSU_REPOSITORY"
+          echo "Selected KSU_STATIC_SELINUX_REFERENCE: ${{ inputs.KSU_STATIC_SELINUX_REFERENCE }}"
           echo "Selected ZRAM: ${{ github.event.inputs.ZRAM }}"
           echo "Selected LSM_BBG: ${{ github.event.inputs.LSM_BBG }}"
           echo "Selected NETFILTER: ${{ github.event.inputs.NETFILTER }}"
@@ -652,9 +666,11 @@ jobs:
           done
 
       - name: Add KernelSU
+        env:
+          KSU_META: ${{ inputs.KSU_META }}
         run: |
           cd kernel_workspace/kernel_platform
-          KSU_META="${{ github.event.inputs.KSU_META }}"
+          KSU_META="${KSU_META:-main/main/}"
 
           # 必须包含两个分隔符（至少三个字段）
           if [[ "$(grep -o '/' <<< "$KSU_META" | wc -l)" -lt 2 ]]; then
@@ -668,18 +684,21 @@ jobs:
           echo "KSU_BUILTIN_BRANCH=$KSU_BUILTIN_BRANCH" >> $GITHUB_ENV
           [[ -n "$MANUAL_HASH" ]] && echo "手动指定 hash: $MANUAL_HASH" || echo "手动指定 hash: 未启用"
 
-          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/refs/heads/${KSU_MANAGER_BRANCH}/kernel/setup.sh" | bash -s "$KSU_BUILTIN_BRANCH"
+          # 先克隆 fork，再调用本地 setup，确保编入的是我们的固定参考实现。
+          git clone --branch "$KSU_BUILTIN_BRANCH" "https://github.com/${KSU_REPOSITORY}.git" KernelSU
+          bash KernelSU/kernel/setup.sh "$KSU_BUILTIN_BRANCH"
           cd ./KernelSU
 
           if [[ -n "$MANUAL_HASH" ]]; then
-            git fetch origin "$KSU_BUILTIN_BRANCH" --depth=50
-            git checkout "$MANUAL_HASH"
+            git fetch origin "$KSU_BUILTIN_BRANCH"
+            git checkout --detach "$MANUAL_HASH"
           fi
 
-          KSU_VERSION=$(expr $(curl -sI "https://api.github.com/repos/tiann/KernelSU/commits?sha=${KSU_MANAGER_BRANCH}&per_page=1" | grep -i "link:" | sed -n 's/.*page=\([0-9]*\)>; rel="last".*/\1/p') "+" 30000)
+          KSU_VERSION=$((30000 + $(git rev-list --count HEAD)))
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
           echo "ksuver=$KSU_VERSION" >> $GITHUB_OUTPUT
           sed -i "s/DKSU_VERSION=16/DKSU_VERSION=${KSU_VERSION}/" kernel/Kbuild
+          echo "KernelSU: source=${KSU_REPOSITORY}, commit=$(git rev-parse --short=12 HEAD), version=${KSU_VERSION}"
 
       - name: Apply Fake Patches
         if: ${{ github.event.inputs.SUSFS_META != '-1' }}
@@ -997,6 +1016,11 @@ jobs:
 
           # KernelSU配置
           set_config "CONFIG_KSU=y"
+          if [ "${{ inputs.KSU_STATIC_SELINUX_REFERENCE }}" = "true" ]; then
+            set_config "CONFIG_KSU_STATIC_SELINUX_REFERENCE=y"
+          else
+            set_config "CONFIG_KSU_STATIC_SELINUX_REFERENCE=n"
+          fi
 
           # KPM配置
           if [ "${{ github.event.inputs.KPM }}" = "KPM" ] || [ "${{ github.event.inputs.KPM }}" = "N/A" ]; then
@@ -1462,13 +1486,13 @@ jobs:
           echo "Using branch: $KSU_MANAGER_BRANCH"
           echo "Downloading artifact: $MANAGER_ARTIFACT"
 
-          run_id=$(gh api "repos/tiann/KernelSU/actions/workflows/build-manager.yml/runs?branch=$KSU_MANAGER_BRANCH&status=success&event=push&per_page=1" --jq '.workflow_runs[0].id' || echo "")
+          run_id=$(gh api "repos/${KSU_MANAGER_REPOSITORY}/actions/workflows/build-manager.yml/runs?branch=$KSU_MANAGER_BRANCH&status=success&event=push&per_page=1" --jq '.workflow_runs[0].id // empty' || echo "")
 
           if [[ -z "$run_id" ]]; then
             echo "No successful workflow run found on branch $KSU_MANAGER_BRANCH. Skipping download."
             exit 0
           fi
-          artifact_url=$(gh api "repos/tiann/KernelSU/actions/runs/$run_id/artifacts" | jq -r ".artifacts[] | select(.name == \"$MANAGER_ARTIFACT\") | .archive_download_url" | head -n1)
+          artifact_url=$(gh api "repos/${KSU_MANAGER_REPOSITORY}/actions/runs/$run_id/artifacts" | jq -r ".artifacts[] | select(.name == \"$MANAGER_ARTIFACT\" and .expired == false) | .archive_download_url" | head -n1)
 
           if [[ -z "$artifact_url" ]]; then
             echo "No artifact '$MANAGER_ARTIFACT' found in run $run_id. Skipping download."
@@ -1481,7 +1505,7 @@ jobs:
       - name: Set zip Suffix
         id: suffix
         run: |
-          echo "value=${{ env.ZRAM_ALGO_U && format('_{0}', env.ZRAM_ALGO_U) || '' }}${{ github.event.inputs.KPM == 'KPM' && '_KPM' || github.event.inputs.KPM == 'KPN' && '_KPN' || '' }}${{ github.event.inputs.LSM_BBG == 'true' && '_BBG' || '' }}_ILH${{ github.event.inputs.SCHED_HMBIRD== 'true' && '_HMBIRD' || '' }}${{ github.event.inputs.DROID_SPACES== 'true' && '_DS' || '' }}${{ github.event.inputs.RE_KERNEL == 'true' && '_REKER' || '' }}${{ github.event.inputs.LZ4_UPDATE == 'true' && '_LZ4UPD' || '' }}" >> $GITHUB_OUTPUT
+          echo "value=${{ env.ZRAM_ALGO_U && format('_{0}', env.ZRAM_ALGO_U) || '' }}${{ github.event.inputs.KPM == 'KPM' && '_KPM' || github.event.inputs.KPM == 'KPN' && '_KPN' || '' }}${{ github.event.inputs.LSM_BBG == 'true' && '_BBG' || '' }}_ILH${{ github.event.inputs.SCHED_HMBIRD== 'true' && '_HMBIRD' || '' }}${{ github.event.inputs.DROID_SPACES== 'true' && '_DS' || '' }}${{ github.event.inputs.RE_KERNEL == 'true' && '_REKER' || '' }}${{ github.event.inputs.LZ4_UPDATE == 'true' && '_LZ4UPD' || '' }}${{ inputs.KSU_STATIC_SELINUX_REFERENCE && '_STATICSELINUX' || '' }}" >> $GITHUB_OUTPUT
 
       - name: Upload AnyKernel3
         uses: actions/upload-artifact@v7
