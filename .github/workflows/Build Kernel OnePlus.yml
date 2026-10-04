@@ -1598,7 +1598,18 @@ jobs:
           manager_tmp=$(mktemp -d "$RUNNER_TEMP/ksun-manager.XXXXXX")
           curl -fL -H "Authorization: token $GITHUB_TOKEN" -o "$manager_tmp/${MANAGER_ARTIFACT}.zip" "$artifact_url"
           unzip -j "$manager_tmp/${MANAGER_ARTIFACT}.zip" "*.apk" -d "$manager_tmp/"
-          python3 "$manager_source/scripts/verify_manager_apk.py" "$manager_tmp/"*.apk
+          # Release CI already verified APK cryptographic signatures. This
+          # kernel runner removes the SDK during disk cleanup; recheck the
+          # pinned certificate here without depending on SDK apksigner.
+          python3 - "$manager_source" "$manager_tmp/"*.apk <<'PY'
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, str(Path(sys.argv[1]) / "scripts"))
+          from verify_manager_apk import verify_pin
+          for apk in sys.argv[2:]:
+              verify_pin(apk)
+              print("PASS: Manager matches the selected kernel certificate:", apk)
+          PY
           cp -- "$manager_tmp/"*.apk ./AnyKernel3/
 
       - name: Set zip Suffix
