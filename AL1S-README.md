@@ -23,6 +23,9 @@ defaults to `dev/dev/`; its final field still supports a manual commit override.
 The fork is cloned before its local setup script runs, so the setup script's
 upstream clone URL cannot silently substitute the official source. Version
 metadata comes from the selected fork commit rather than a different repository.
+Tags are optional: workflow metadata and the integrated Kbuild both fall back
+to the selected commit's short ID when no reachable tag exists. Manual commit
+selection does not shallow the checkout or truncate the version commit count.
 Other root-provider branches are unchanged. The fork currently provides `dev`,
 not the previous source's `dev-susfs` branch; this change does not port SUSFS into
 the fork.
