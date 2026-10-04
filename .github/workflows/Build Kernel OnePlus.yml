@@ -716,6 +716,8 @@ jobs:
             git checkout --detach "$MANUAL_HASH"
           fi
 
+          echo "KSU_SOURCE_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
           KSU_VERSION=$((30000 + $(git rev-list --count HEAD)))
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
           sed -i "s/KSU_VERSION_FALLBACK := 1/KSU_VERSION_FALLBACK := $KSU_VERSION/g" kernel/Kbuild
@@ -1568,15 +1570,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           MANAGER_ARTIFACT=manager
 
           echo "Using branch: $KSU_MANAGER_BRANCH"
           echo "Downloading artifact: $MANAGER_ARTIFACT"
 
-          run_id=$(gh api "repos/${KSU_REPOSITORY}/actions/workflows/build-manager-ci.yml/runs?branch=$KSU_MANAGER_BRANCH&status=success&event=push&per_page=1" --jq '.workflow_runs[0].id // empty' || echo "")
+          echo "Pairing Manager with kernel source commit: $KSU_SOURCE_COMMIT"
+          run_id=$(gh api "repos/${KSU_REPOSITORY}/actions/workflows/build-manager-ci.yml/runs?branch=$KSU_MANAGER_BRANCH&head_sha=$KSU_SOURCE_COMMIT&status=success&event=push&per_page=1" --jq '.workflow_runs[0].id // empty' || echo "")
 
           if [[ -z "$run_id" ]]; then
-            echo "No successful workflow run found on branch $KSU_MANAGER_BRANCH. Skipping download."
+            echo "::warning::No successful Manager CI for this exact kernel source commit. Skipping APK rather than bundling an old mismatched Manager."
             exit 0
           fi
           artifact_url=$(gh api "repos/${KSU_REPOSITORY}/actions/runs/$run_id/artifacts" | jq -r ".artifacts[] | select(.name == \"$MANAGER_ARTIFACT\" and .expired == false) | .archive_download_url" | head -n1)
@@ -1586,8 +1590,16 @@ jobs:
             exit 0
           fi
           echo "Downloading from: $artifact_url"
-          curl -fL -H "Authorization: token $GITHUB_TOKEN" -o "${MANAGER_ARTIFACT}.zip" "$artifact_url"
-          unzip -j "${MANAGER_ARTIFACT}.zip" "*.apk" -d ./AnyKernel3/
+          manager_source="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/KernelSU-Next"
+          if [[ ! -f "$manager_source/scripts/verify_manager_apk.py" ]]; then
+            echo "::warning::Selected source predates pinned fork signing. Skipping unverified APK."
+            exit 0
+          fi
+          manager_tmp=$(mktemp -d "$RUNNER_TEMP/ksun-manager.XXXXXX")
+          curl -fL -H "Authorization: token $GITHUB_TOKEN" -o "$manager_tmp/${MANAGER_ARTIFACT}.zip" "$artifact_url"
+          unzip -j "$manager_tmp/${MANAGER_ARTIFACT}.zip" "*.apk" -d "$manager_tmp/"
+          python3 "$manager_source/scripts/verify_manager_apk.py" "$manager_tmp/"*.apk
+          cp -- "$manager_tmp/"*.apk ./AnyKernel3/
 
       - name: Set zip Suffix
         id: suffix
