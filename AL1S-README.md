@@ -1,12 +1,34 @@
 # AL1S / OnePlus 13
 
-This fork adds two independent inputs to **Build All OnePlus Kernels**, on the
+This fork adds three independent inputs to **Build All OnePlus Kernels**, on the
 `KernelSU-Next` branch. All compilation runs on GitHub Actions.
 
 | Input | Default | Effect |
 |---|---|---|
 | `NOMOUNT` | on | Build upstream `maxsteeel/nomount` into the kernel, pinned to `6b1be186322d4e0bdc465cf27f6fc0d3679087c6`. Runtime activation still needs the matching NoMount userspace module. |
 | `ORIGINOS_DLKM` | off | Add the OriginOS compatibility ABI to OnePlus 13's **vendor `msm_drm.ko`**, including the information nodes previously implemented in the 13T boot kernel. Currently restricted to `oneplus_13_b`. Builds the matching external display module after the upstream kernel build. |
+| `KSU_STATIC_SELINUX_REFERENCE` | off | Labelled `静态 SELinux 参考策略（高通8E专用）`. Build the fork's fixed query reference with `CONFIG_KSU_STATIC_SELINUX_REFERENCE=y`; disabled builds explicitly use `n`. This input is available for every device selection, with no device restriction or added validation step. |
+
+## KernelSU Next source
+
+All device selections on this branch now use `Maga-King/KernelSU-Next` for both
+kernel integration and the optional bundled Manager download. `KSU_META`
+defaults to `dev/dev/`; its final field still supports a manual commit override.
+The fork is cloned before its local setup script runs, so the setup script's
+upstream clone URL cannot silently substitute the official source. Version
+metadata comes from the selected fork commit rather than a different repository.
+Other root-provider branches are unchanged. The fork currently provides `dev`,
+not the previous source's `dev-susfs` branch; this change does not port SUSFS into
+the fork.
+
+The static-reference switch changes only `CONFIG_KSU_STATIC_SELINUX_REFERENCE`.
+It does not enable `ORIGINOS_DLKM`, change its device restriction or change the
+phone's real enforcement policy. KSUN's existing runtime `selinux_hide` feature
+must still be enabled. The fixed policy is not a universal ROM reference.
+There are no new workflow verification jobs or CPU/ROM compatibility checks.
+When reusing `FAST_BASE_RUN`, use a base originally built with the same KSU
+source/commit and static-reference setting; restoring a base cannot recompile
+this option. Leave `FAST_BASE_RUN` empty when changing the option.
 
 With `ORIGINOS_DLKM=off`, no compatibility source, init/exit hook or extra KMI entries are injected.
 NoMount and the existing kernel options remain independently selectable.
