@@ -6,7 +6,7 @@ This fork adds three independent inputs to **Build All OnePlus Kernels**, on the
 | Input | Default | Effect |
 |---|---|---|
 | `NOMOUNT` | on | Build upstream `maxsteeel/nomount` into the kernel, pinned to `6b1be186322d4e0bdc465cf27f6fc0d3679087c6`. Runtime activation still needs the matching NoMount userspace module. |
-| `ORIGINOS_DLKM` | off | Add the OriginOS compatibility ABI to OnePlus 13's **vendor `msm_drm.ko`**, including the information nodes previously implemented in the 13T boot kernel. Currently restricted to `oneplus_13_b`. Builds the matching external display module after the upstream kernel build. |
+| `ORIGINOS_DLKM` | off | Add the OriginOS compatibility ABI to **vendor `msm_drm.ko`**, including the information nodes previously implemented in the 13T boot kernel. No workflow device allow-list is imposed. Builds the matching external display module after the upstream kernel build; source/ABI compatibility still applies. |
 | `KSU_STATIC_SELINUX_REFERENCE` | off | Labelled `静态 SELinux 参考策略（高通8E专用）`. Build the fork's fixed query reference with `CONFIG_KSU_STATIC_SELINUX_REFERENCE=y`; disabled builds explicitly use `n`. This input is available for every device selection, with no device restriction or added validation step. |
 
 The dispatch form has 24 inputs. The `SPACE_NOCLEAN` and `BUILD_NOCACHE`
@@ -37,8 +37,8 @@ combined state is integrated in this branch without merging KSUN-specific
 root-provider changes.
 
 The static-reference switch changes only `CONFIG_KSU_STATIC_SELINUX_REFERENCE`.
-It does not enable `ORIGINOS_DLKM`, change its device restriction or change the
-phone's real enforcement policy. KSU's existing runtime `selinux_hide` feature
+It does not enable `ORIGINOS_DLKM`, guarantee display-driver compatibility, or
+change the phone's real enforcement policy. KSU's existing runtime `selinux_hide` feature
 must still be enabled. The fixed policy is not a universal ROM reference.
 There are no new workflow verification jobs or CPU/ROM compatibility checks.
 When reusing `FAST_BASE_RUN`, use a base originally built with the same KSU
@@ -49,6 +49,12 @@ With `ORIGINOS_DLKM=off`, no compatibility source, init/exit hook or extra KMI e
 NoMount and the existing kernel options remain independently selectable.
 
 ## OriginOS interface scope
+
+`ORIGINOS_DLKM` is no longer gated on `FILE=oneplus_13_b`; `oneplus_13t_b`
+and other selections can enter the build. The adapter still uses the existing
+SM8750 display source layout and sun/perf build helpers. This is not a port to
+every SoC. Source-layout, required-symbol, and module-link checks remain in
+place; removing the selection gate does not establish boot compatibility.
 
 - `/sys/fp_id/fp_id`: compatibility identity `ultrasonic_fake_nyako`.
 - `/sys/ufs/ufsid`: forwards `/sys/devices/soc0/serial_number`.

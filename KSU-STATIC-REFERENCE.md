@@ -39,5 +39,6 @@ KernelSU-Next: NoMount, the optional OnePlus 13 OriginOS msm_drm adapter,
 external display DDK build, FAST prebuilt/resume, KMI namespace handling,
 and stripped msm_drm-only artifact. KernelSU-specific source, SUSFS patching,
 Manager download, and artifact naming remain intact. OriginOS DLKM defaults
-to off and remains restricted to oneplus_13_b. The static-reference option
-is independent and retains its default of false.
+to off, without a workflow device allow-list. Display source-layout and ABI
+checks remain intact. The static-reference option is independent and retains
+its default of false.
