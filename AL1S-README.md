@@ -9,6 +9,12 @@ This fork adds three independent inputs to **Build All OnePlus Kernels**, on the
 | `ORIGINOS_DLKM` | off | Add the OriginOS compatibility ABI to OnePlus 13's **vendor `msm_drm.ko`**, including the information nodes previously implemented in the 13T boot kernel. Currently restricted to `oneplus_13_b`. Builds the matching external display module after the upstream kernel build. |
 | `KSU_STATIC_SELINUX_REFERENCE` | off | Labelled `静态 SELinux 参考策略（高通8E专用）`. Build the fork's fixed query reference with `CONFIG_KSU_STATIC_SELINUX_REFERENCE=y`; disabled builds explicitly use `n`. This input is available for every device selection, with no device restriction or added validation step. |
 
+The dispatch form has 24 inputs. The `SPACE_NOCLEAN` and `BUILD_NOCACHE`
+switches were removed to stay below GitHub's 25-input limit. Workspace cleanup
+and build caching remain enabled, matching both switches' previous default
+values. Cache save size/hit conditions and the FAST-only ThinLTO conditions
+are retained.
+
 ## KernelSU Next source
 
 All device selections on this branch now use `Maga-King/KernelSU-Next` for both

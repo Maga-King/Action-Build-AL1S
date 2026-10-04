@@ -187,16 +187,6 @@ on:
         description: "是否拉取SUSFS-DEV分支？//Pull the SUSFS-DEV branch?"
         required: true
         default: false
-      SPACE_NOCLEAN:
-        type: boolean
-        description: "是否停用空间清扫？//Disable workspace cleaning?"
-        required: true
-        default: false
-      BUILD_NOCACHE:
-        type: boolean
-        description: "是否停用此次缓存？//Disable caching for this build?"
-        required: true
-        default: false
 
 jobs:
   build:
@@ -217,7 +207,6 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Maximize Build Space
-        if: ${{ github.event.inputs.SPACE_NOCLEAN == 'false' }}
         env:
           ROOT_RESERVE_MB: '8192'
           TEMP_RESERVE_MB: '2048'
@@ -422,7 +411,6 @@ jobs:
           free -h
 
       - name: Set Cache Environment
-        if: ${{ github.event.inputs.BUILD_NOCACHE == 'false' }}
         run: |
           echo "CCACHE_DIR=$HOME/.ccache_${{ github.event.inputs.FILE }}" >> $GITHUB_ENV
           mkdir -p "$HOME/.ccache_${{ github.event.inputs.FILE }}"
@@ -467,7 +455,6 @@ jobs:
          sudo cp -f "$LIB_DIR/ccache" /usr/bin/ccache && sudo chmod +x /usr/bin/ccache
 
       - name: Restore Ccache
-        if: ${{ github.event.inputs.BUILD_NOCACHE == 'false' }}
         id: restore-ccache
         uses: actions/cache/restore@v5
         with:
@@ -475,7 +462,7 @@ jobs:
           key: ccache-${{ runner.os }}-${{ github.ref_name }}-${{ github.event.inputs.FILE }}-${{ env.BUILD_METHOD }}-${{ github.event.inputs.FAST_BUILD == 'true' && 'alpha' || 'beta' }}-17.0
 
       - name: Restore ThinLTO Cache
-        if: ${{ github.event.inputs.BUILD_NOCACHE == 'false' && github.event.inputs.FAST_BUILD == 'true' }}
+        if: ${{ github.event.inputs.FAST_BUILD == 'true' }}
         id: restore-thinlto
         uses: actions/cache/restore@v5
         with:
@@ -483,7 +470,6 @@ jobs:
           key: thinlto-${{ runner.os }}-${{ github.ref_name }}-${{ github.event.inputs.FILE }}-17.0
 
       - name: Initialize Ccache
-        if: ${{ github.event.inputs.BUILD_NOCACHE == 'false' }}
         run: |
           INIT_FLAG="${{ env.CCACHE_DIR }}/.ccache_initialized"
           if command -v ccache >/dev/null 2>&1; then
@@ -1373,7 +1359,7 @@ jobs:
           fi
 
           LD_WRAPPER=""
-          if [ "${{ github.event.inputs.BUILD_NOCACHE }}" = "false" ] && [[ "$KERNEL_VERSION" == 5.* ]]; then
+          if [[ "$KERNEL_VERSION" == 5.* ]]; then
             LDCACHE_DIR="${GITHUB_WORKSPACE}/kernel_workspace/.thinlto-cache"
             mkdir -p "$LDCACHE_DIR"
             LD_WRAPPER="${GITHUB_WORKSPACE}/kernel_workspace/ld-wrapper"
@@ -1677,7 +1663,6 @@ jobs:
           path: ZRAM-Module/*
 
       - name: Check Cache Size Before Save
-        if: ${{ github.event.inputs.BUILD_NOCACHE == 'false' }}
         id: cache_size_check
         run: |
           check_size() {
@@ -1700,14 +1685,14 @@ jobs:
           check_size "${{ github.workspace }}/kernel_workspace/.thinlto-cache" "thinlto"
 
       - name: Save Ccache
-        if: ${{ github.event.inputs.BUILD_NOCACHE == 'false' && steps.cache_size_check.outputs.ccache_save == 'true' && steps.restore-ccache.outputs.cache-hit != 'true' }}
+        if: ${{ steps.cache_size_check.outputs.ccache_save == 'true' && steps.restore-ccache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v5
         with:
           path: ${{ env.CCACHE_DIR }}
           key: ccache-${{ runner.os }}-${{ github.ref_name }}-${{ github.event.inputs.FILE }}-${{ env.BUILD_METHOD }}-${{ github.event.inputs.FAST_BUILD == 'true' && 'alpha' || 'beta' }}-17.0
 
       - name: Save ThinLTO Cache
-        if: ${{ github.event.inputs.BUILD_NOCACHE == 'false' && github.event.inputs.FAST_BUILD == 'true' && steps.cache_size_check.outputs.thinlto_save == 'true' && steps.restore-thinlto.outputs.cache-hit != 'true' }}
+        if: ${{ github.event.inputs.FAST_BUILD == 'true' && steps.cache_size_check.outputs.thinlto_save == 'true' && steps.restore-thinlto.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v5
         with:
           path: ${{ github.workspace }}/kernel_workspace/.thinlto-cache
