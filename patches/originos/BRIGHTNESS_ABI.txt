@@ -7,6 +7,14 @@ It does NOT replace the OnePlus backlight, HBM, fingerprint, AOD, demura,
 temperature compensation, panel command sets, thermal limits or CWB paths.
 Existing AL1S nodes and their handlers are unchanged.
 
+2026-10-05: carried onto both KernelSU and KernelSU-Next production branches.
+The adapter now follows the selected Qualcomm display source directory and
+CPUD/BUILD_METHOD. OP13/13T source-injection tests and Linux routing tests pass;
+this is not a new full DDK build or proof of hardware support on every SoC.
+Enable ORIGINOS_DLKM and deploy the newly built matching msm_drm.ko.
+Neither late userspace mounting nor flashing only the Image changes the
+display module already loaded at boot.
+
 New primary-display-only read-only nodes (0444):
   /sys/lcm/bl_level                 panel->bl_config.bl_level
   /sys/lcm/hbm_max_brightness       panel->bl_config.bl_max_level

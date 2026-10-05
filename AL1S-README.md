@@ -42,6 +42,26 @@ this option. Leave `FAST_BASE_RUN` empty when changing the option.
 With `ORIGINOS_DLKM=off`, no compatibility source, init/exit hook or extra KMI entries are injected.
 NoMount and the existing kernel options remain independently selectable.
 
+## 2026-10-05 正式分支显示修复同步
+
+此前 `91135a8` 和 `8b3ad9c` 只在
+`originos-op13-brightness-demo2`，没有进入 KSU/KSUN 正式构建。
+现已同步统一亮度只读 ABI 和所选高通平台源码/FAST 路由，
+没有改动本分支的 Root 提供方、管理器签名或静态参考策略。
+
+启用 `ORIGINOS_DLKM` 才编入兼容层；升级源码后须重新生成并部署
+匹配的 `msm_drm.ko`，只刷 AnyKernel3 的 Image 不会替换已加载的显示模块。
+恢复节点是 `/sys/lcm/{bl_level,hbm_max_brightness,normal_max_brightness,oled_hbm,al1s_bl_abi}`。
+这些节点只读，没有新增轮询、亮度写入或温控绕过。
+`oled_hbm` 表示全局 HBM，不能混同 `/sys/kernel/oplus_display/hbm` 的指纹 HBM。
+原 AOD/指纹处理、ufs/fp/cpu 信息节点保持原实现；详见
+`patches/originos/BRIGHTNESS_ABI.txt`。
+
+注意：ROM 的指纹退出脚本仍须有权限写原生指纹 HBM 节点。
+已抓到 `nroc.rc` 在 `debug.nyako.fod=0` 后执行
+`write /sys/kernel/oplus_display/hbm 0` 被拒绝，导致指纹 HBM 残留并拦截背光。
+补回本只读 ABI 不会自动修复这条独立的 ROM 权限问题。
+
 The workflow's selected FILE still selects its official manifest/source tree.
 The adapter directory follows the manifest CPU (or the older flat oplus/
 layout); kernel/display targets follow CPUD and BUILD_METHOD. Nothing falls
