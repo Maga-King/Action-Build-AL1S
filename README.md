@@ -1,4 +1,6 @@
 **`简体中文`** | [English](README-en.md)
+
+本分支为 **KERNELSU-NEXT-PURE**：Numbersf Next 构建方案 + 自用 KSUN fork + 可选 NoMount。构建前请查看 [分支说明与默认值差异](PURE-README.md)。
  
 [![Workflow Status](https://img.shields.io/github/actions/workflow/status/Numbersf/Action-Build/Build%20Kernel%20OnePlus.yml?branch=KernelSU-Next&label=remote%20build&logo=github-actions&style=flat-square)](https://github.com/Numbersf/Action-Build/actions/workflows/Build%20Kernel%20OnePlus.yml?query=branch%3AKernelSU-Next) ![Downloads](https://img.shields.io/github/downloads/Numbersf/Action-Build/total)
  

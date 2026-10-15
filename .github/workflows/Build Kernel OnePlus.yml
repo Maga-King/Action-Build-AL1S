@@ -87,7 +87,7 @@ on:
         type: string
         description: "回退SUSFS(输入哈希或次数或-1关闭)//Rollback SUSFS (Enter commit hash, count, or -1 to disable)"
         required: false
-        default: ""
+        default: "-1"
       DYNAMIC_REPO:
         type: string
         description: "动态清单仓库所有者//Manifest repository owner"
@@ -102,7 +102,12 @@ on:
         type: string
         description: "管理器分支名(必填)/内置分支名(必填)/回退分支提交哈希版本(留空不修改)//Manager Branch name (Required) / Builtin branch name (Required) / Rollback branch commit hash version (Leave blank to not modify)"
         required: false
-        default: "dev/dev-susfs/"
+        default: "dev/dev/"
+      NOMOUNT:
+        type: boolean
+        description: "启用 NoMount 内核支持//Enable NoMount kernel support"
+        required: true
+        default: true
       LZ4_UPDATE:
         type: boolean
         description: "是否升级LZ4到上游最新？//Upgrade LZ4 to the latest upstream?"
@@ -180,9 +185,13 @@ on:
 
 jobs:
   build:
-    name: ${{ github.event.inputs.FAST_BUILD == 'true' && ' [FAST]' || '' }}${{ contains(github.event.inputs.FILE, '_aosp') && ' [AOSP]' || '' }}${{ github.event.inputs.KPM == 'KPM' && ' [KPM]' || github.event.inputs.KPM == 'KPN' && ' [KPN]' || '' }}${{ github.event.inputs.LSM_BBG == 'true' && ' [BBG]' || '' }}${{ github.event.inputs.SCHED_HMBIRD == 'true' && ' [HMBIRD]' || '' }}${{ github.event.inputs.DROID_SPACES == 'true' && ' [DS]' || '' }}${{ startsWith(github.event.inputs.ZRAM, '1/') && ' [ZRAM]' || '' }}${{ github.event.inputs.RE_KERNEL == 'true' && ' [REKER]' || '' }}${{ github.event.inputs.LZ4_UPDATE == 'true' && ' [LZ4UPD]' || '' }}For ${{ github.event.inputs.FILE }} ${{ github.event.inputs.SUFFIX }}
+    name: ${{ github.event.inputs.FAST_BUILD == 'true' && ' [FAST]' || '' }}${{ contains(github.event.inputs.FILE, '_aosp') && ' [AOSP]' || '' }}${{ github.event.inputs.KPM == 'KPM' && ' [KPM]' || github.event.inputs.KPM == 'KPN' && ' [KPN]' || '' }}${{ github.event.inputs.LSM_BBG == 'true' && ' [BBG]' || '' }}${{ github.event.inputs.SCHED_HMBIRD == 'true' && ' [HMBIRD]' || '' }}${{ github.event.inputs.DROID_SPACES == 'true' && ' [DS]' || '' }}${{ startsWith(github.event.inputs.ZRAM, '1/') && ' [ZRAM]' || '' }}${{ github.event.inputs.RE_KERNEL == 'true' && ' [REKER]' || '' }}${{ github.event.inputs.LZ4_UPDATE == 'true' && ' [LZ4UPD]' || '' }}${{ inputs.NOMOUNT && ' [NoMount]' || '' }}For ${{ github.event.inputs.FILE }} ${{ github.event.inputs.SUFFIX }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
     env:
+      KSU_REPOSITORY: Maga-King/KernelSU-Next
       CCACHE_COMPILERCHECK: "none"
       CCACHE_NOHASHDIR: "true"
       CCACHE_NOHARDLINK: "true"
@@ -208,7 +217,10 @@ jobs:
           git config --global user.name "Numbersf"
           git config --global user.email "263623064@qq.com"
           mkdir kernel_workspace && cd kernel_workspace
-          git clone https://github.com/Numbersf/Action-Build.git -b KernelSU-Next
+          git clone --no-checkout "https://github.com/${GITHUB_REPOSITORY}.git" Action-Build
+          git -C Action-Build fetch --depth=1 origin "$GITHUB_SHA"
+          git -C Action-Build checkout --detach "$GITHUB_SHA"
+          test -f Action-Build/scripts/al1s_nomount.sh
 
       - name: Extract Manifest Info
         id: extract_info
@@ -336,6 +348,8 @@ jobs:
           echo "Selected KPM: ${{ github.event.inputs.KPM }}"
           echo "Custom SUSFS_META: ${{ github.event.inputs.SUSFS_META }}"
           echo "Custom KSU_META: ${{ github.event.inputs.KSU_META }}"
+          echo "KernelSU Next source: $KSU_REPOSITORY"
+          echo "Selected NOMOUNT: ${{ inputs.NOMOUNT }}"
           echo "Selected ZRAM: ${{ github.event.inputs.ZRAM }}"
           echo "Selected LSM_BBG: ${{ github.event.inputs.LSM_BBG }}"
           echo "Selected NETFILTER: ${{ github.event.inputs.NETFILTER }}"
@@ -652,9 +666,12 @@ jobs:
           done
 
       - name: Add KernelSU Next
+        env:
+          KSU_META: ${{ inputs.KSU_META }}
+          SUSFS_META: ${{ inputs.SUSFS_META }}
         run: |
           cd kernel_workspace/kernel_platform
-          KSU_META="${{ github.event.inputs.KSU_META }}"
+          KSU_META="${KSU_META:-dev/dev/}"
 
           # 必须包含两个分隔符（至少三个字段）
           if [[ "$(grep -o '/' <<< "$KSU_META" | wc -l)" -lt 2 ]]; then
@@ -668,19 +685,31 @@ jobs:
           echo "KSU_BUILTIN_BRANCH=$KSU_BUILTIN_BRANCH" >> $GITHUB_ENV
           [[ -n "$MANUAL_HASH" ]] && echo "手动指定 hash: $MANUAL_HASH" || echo "手动指定 hash: 未启用"
 
-          curl -LSs "https://raw.githubusercontent.com/pershoot/KernelSU-Next/refs/heads/${KSU_MANAGER_BRANCH}/kernel/setup.sh" | bash -s "$KSU_BUILTIN_BRANCH"
+          # 先克隆 fork，避免 setup.sh 内置的官方地址把源码换回上游。
+          git clone --branch "$KSU_BUILTIN_BRANCH" "https://github.com/${KSU_REPOSITORY}.git" KernelSU-Next
+          bash KernelSU-Next/kernel/setup.sh "$KSU_BUILTIN_BRANCH"
           cd ./KernelSU-Next
 
           if [[ -n "$MANUAL_HASH" ]]; then
-            git fetch origin "$KSU_BUILTIN_BRANCH" --depth=50
-            git checkout "$MANUAL_HASH"
+            git fetch origin "$KSU_BUILTIN_BRANCH"
+            git checkout --detach "$MANUAL_HASH"
           fi
 
-          KSU_VERSION=$(expr $(curl -sI "https://api.github.com/repos/pershoot/KernelSU-Next/commits?sha=${KSU_MANAGER_BRANCH}&per_page=1" | grep -i "link:" | sed -n 's/.*page=\([0-9]*\)>; rel="last".*/\1/p') "+" 30000)
+          if [[ "$SUSFS_META" != "-1" ]] && ! grep -Eq '^[[:space:]]*config KSU_SUSFS[[:space:]]*$' kernel/Kconfig; then
+            echo "::error::Selected KernelSU Next source has no built-in SUSFS support. Set SUSFS_META=-1."
+            exit 1
+          fi
+
+          echo "KSU_SOURCE_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+          KSU_VERSION=$((30000 + $(git rev-list --count HEAD)))
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
           sed -i "s/KSU_VERSION_FALLBACK := 1/KSU_VERSION_FALLBACK := $KSU_VERSION/g" kernel/Kbuild
-          KSU_GIT_TAG=$(curl -sL "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/tags" | grep -o '"name": *"[^"]*"' | head -n 1 | sed 's/"name": "//;s/"//')
+          KSU_GIT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || git rev-parse --short=12 HEAD)
+          # Kbuild 自己也会读取 Git 版本，同样兼容没有 tag 的 fork。
+          sed -i 's@git describe --tags --abbrev=0 2>/dev/null@git describe --tags --abbrev=0 2>/dev/null || git rev-parse --short=12 HEAD@' kernel/Kbuild
           sed -i "s/KSU_VERSION_TAG_FALLBACK := v0.0.1/KSU_VERSION_TAG_FALLBACK := $KSU_GIT_TAG/g" kernel/Kbuild
+          echo "KernelSU Next: source=${KSU_REPOSITORY}, commit=$(git rev-parse --short HEAD), version=${KSU_VERSION}, tag-or-commit=${KSU_GIT_TAG}"
 
       - name: Apply Fake Patches
         if: ${{ github.event.inputs.SUSFS_META != '-1' }}
@@ -990,6 +1019,7 @@ jobs:
 
           # KernelSU Next配置
           set_config "CONFIG_KSU=y"
+          set_config "CONFIG_KSU_STATIC_SELINUX_REFERENCE=n"
 
           # KPM配置
           if [ "${{ github.event.inputs.KPM }}" = "KPM" ] || [ "${{ github.event.inputs.KPM }}" = "N/A" ]; then
@@ -1154,6 +1184,10 @@ jobs:
         run: |
           echo "Disabling GPUEB for MTK kernel 5.10"
           sed -i '/obj-y.*gpueb/d' kernel_workspace/kernel-5.10/drivers/gpu/mediatek/Makefile
+
+      - name: Add NoMount support
+        if: ${{ inputs.NOMOUNT }}
+        run: bash "$GITHUB_WORKSPACE/kernel_workspace/Action-Build/scripts/al1s_nomount.sh" "$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/common"
 
       - name: Build Kernel FAST
         if: ${{ github.event.inputs.FAST_BUILD == 'true' }}
@@ -1450,26 +1484,47 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           MANAGER_ARTIFACT=manager
 
           echo "Using branch: $KSU_MANAGER_BRANCH"
           echo "Downloading artifact: $MANAGER_ARTIFACT"
 
-          run_id=$(gh api "repos/KernelSU-Next/KernelSU-Next/actions/workflows/build-manager-ci.yml/runs?branch=$KSU_MANAGER_BRANCH&status=success&event=push&per_page=1" --jq '.workflow_runs[0].id' || echo "")
+          echo "Pairing Manager with kernel source commit: $KSU_SOURCE_COMMIT"
+          run_id=$(gh api "repos/${KSU_REPOSITORY}/actions/workflows/build-manager-ci.yml/runs?branch=$KSU_MANAGER_BRANCH&head_sha=$KSU_SOURCE_COMMIT&status=success&event=push&per_page=1" --jq '.workflow_runs[0].id // empty' || echo "")
 
           if [[ -z "$run_id" ]]; then
-            echo "No successful workflow run found on branch $KSU_MANAGER_BRANCH. Skipping download."
+            echo "::warning::No successful Manager CI for this exact kernel source commit. Skipping APK rather than bundling an old mismatched Manager."
             exit 0
           fi
-          artifact_url=$(gh api "repos/KernelSU-Next/KernelSU-Next/actions/runs/$run_id/artifacts" | jq -r ".artifacts[] | select(.name == \"$MANAGER_ARTIFACT\") | .archive_download_url" | head -n1)
+          artifact_url=$(gh api "repos/${KSU_REPOSITORY}/actions/runs/$run_id/artifacts" | jq -r ".artifacts[] | select(.name == \"$MANAGER_ARTIFACT\" and .expired == false) | .archive_download_url" | head -n1)
 
           if [[ -z "$artifact_url" ]]; then
             echo "No artifact '$MANAGER_ARTIFACT' found in run $run_id. Skipping download."
             exit 0
           fi
           echo "Downloading from: $artifact_url"
-          curl -fL -H "Authorization: token $GITHUB_TOKEN" -o "${MANAGER_ARTIFACT}.zip" "$artifact_url"
-          unzip -j "${MANAGER_ARTIFACT}.zip" "*.apk" -d ./AnyKernel3/
+          manager_source="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/KernelSU-Next"
+          if [[ ! -f "$manager_source/scripts/verify_manager_apk.py" ]]; then
+            echo "::warning::Selected source predates pinned fork signing. Skipping unverified APK."
+            exit 0
+          fi
+          manager_tmp=$(mktemp -d "$RUNNER_TEMP/ksun-manager.XXXXXX")
+          curl -fL -H "Authorization: token $GITHUB_TOKEN" -o "$manager_tmp/${MANAGER_ARTIFACT}.zip" "$artifact_url"
+          unzip -j "$manager_tmp/${MANAGER_ARTIFACT}.zip" "*.apk" -d "$manager_tmp/"
+          # Release CI already verified APK cryptographic signatures. This
+          # kernel runner removes the SDK during disk cleanup; recheck the
+          # pinned certificate here without depending on SDK apksigner.
+          python3 - "$manager_source" "$manager_tmp/"*.apk <<'PY'
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, str(Path(sys.argv[1]) / "scripts"))
+          from verify_manager_apk import verify_pin
+          for apk in sys.argv[2:]:
+              verify_pin(apk)
+              print("PASS: Manager matches the selected kernel certificate:", apk)
+          PY
+          cp -- "$manager_tmp/"*.apk ./AnyKernel3/
 
       - name: Set zip Suffix
         id: suffix
